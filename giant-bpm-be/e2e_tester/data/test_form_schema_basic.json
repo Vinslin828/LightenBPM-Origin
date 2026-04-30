@@ -1,0 +1,33 @@
+{
+  "root": [
+    "0a666b3c-b744-4bab-b904-60bc7c152c6d",
+    "2b0d6792-facb-4bf0-a46a-ef56291a41d3"
+  ],
+  "entities": {
+    "0a666b3c-b744-4bab-b904-60bc7c152c6d": {
+      "attributes": {
+        "width": 12,
+        "name": "text_field_miprtv5g4hx7u",
+        "label": "Text Field 1",
+        "inputType": "text",
+        "placeholder": "Enter text",
+        "disabled": false,
+        "readonly": false,
+        "defaultValue": "",
+        "required": false
+      },
+      "type": "input"
+    },
+    "2b0d6792-facb-4bf0-a46a-ef56291a41d3": {
+      "attributes": {
+        "width": 12,
+        "label": "Amount",
+        "name": "number_field_miprtv5g53nam",
+        "required": false,
+        "expression": "",
+        "decimalDigits": 0
+      },
+      "type": "number"
+    }
+  }
+}

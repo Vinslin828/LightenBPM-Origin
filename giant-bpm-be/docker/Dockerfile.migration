@@ -1,0 +1,43 @@
+# Migration stage
+FROM node:22-alpine AS migration
+
+WORKDIR /app
+
+# Install curl, bash, aws-cli, jq, postgresql-client
+RUN apk add --no-cache curl bash aws-cli jq postgresql-client
+
+# Install pnpm directly (avoid corepack runtime download issues in private subnets)
+RUN npm install -g pnpm@10.15.1
+
+# Copy package files
+COPY package*.json pnpm-lock.yaml* ./
+
+# Install production dependencies + prisma CLI
+RUN pnpm install --prod --frozen-lockfile
+RUN pnpm add -D prisma @prisma/client
+
+# Copy prisma schema and seed file
+COPY prisma ./prisma
+
+# Generate Prisma client
+RUN pnpm prisma generate
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nestjs -u 1001
+
+# Change ownership of the app directory
+RUN chown -R nestjs:nodejs /app
+USER nestjs
+
+# Default command is migration (can be overridden for seed)
+# Construct DATABASE_URL from environment variables at runtime
+CMD ["/bin/bash", "-c", "\
+echo 'Constructing DATABASE_URL from environment variables...'; \
+ENCODED_USERNAME=$(echo -n \"$DB_USER\" | jq -sRr @uri); \
+ENCODED_PASSWORD=$(echo -n \"$DB_PASSWORD\" | jq -sRr @uri); \
+export DATABASE_URL=\"postgresql://${ENCODED_USERNAME}:${ENCODED_PASSWORD}@${DB_HOST}:${DB_PORT:-5432}/${DB_NAME}?schema=${DB_SCHEMA}\"; \
+echo \"✓ DATABASE_URL constructed\"; \
+echo \"Connection: ${DB_USER}@${DB_HOST}:${DB_PORT:-5432}/${DB_NAME}?schema=${DB_SCHEMA}\"; \
+pnpm prisma migrate deploy \
+"]

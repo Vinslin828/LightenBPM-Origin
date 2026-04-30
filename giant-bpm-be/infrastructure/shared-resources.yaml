@@ -1,0 +1,326 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Shared Resources for BPM Application (All Stages)
+
+Parameters:
+  SharedStage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+    Description: Deployment shared stage (for tagging purposes only)
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-089a52c9fb373309c
+    Description: Existing VPC ID
+
+  SubnetPrivate:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-0ac04f7e4bc36c1e6
+    Description: Existing Private Subnet 1 ID (ap-1a)
+
+  SubnetPrivate2:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-0b71f9769521b2a94
+    Description: Existing Private Subnet 2 ID (ap-1c)
+
+  AppPort:
+    Type: Number
+    Default: 3000
+    Description: Application port for ECS containers
+
+Resources:
+  # =============================================================================
+  # SECURITY GROUPS
+  # =============================================================================
+  VPCLinkSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Security group for VPC Link - ${SharedStage}"
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: "Allow all outbound traffic"
+      Tags:
+        - Key: Name
+          Value: !Sub "${SharedStage}-${AWS::StackName}-vpclink-sg"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !Ref SharedStage
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Security group for Shared ALB - ${SharedStage}"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref VPCLinkSecurityGroup
+          Description: "HTTP access from VPC Link"
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref VPCLinkSecurityGroup
+          Description: "HTTPS access from VPC Link"
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: "All outbound traffic"
+      Tags:
+        - Key: Name
+          Value: !Sub "${SharedStage}-${AWS::StackName}-alb-sg"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !Ref SharedStage
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Security group for ECS tasks - ${SharedStage}"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: "Access from Shared ALB"
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: "All outbound traffic"
+      Tags:
+        - Key: Name
+          Value: !Sub "${SharedStage}-${AWS::StackName}-ecs-sg"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !Ref SharedStage
+
+  # =============================================================================
+  # API GATEWAY VPC LINK
+  # =============================================================================
+  ApiGatewayVpcLink:
+    Type: AWS::ApiGatewayV2::VpcLink
+    Properties:
+      Name: !Sub "${AWS::StackName}-vpc-link"
+      SubnetIds:
+        - !Ref SubnetPrivate
+        - !Ref SubnetPrivate2
+      SecurityGroupIds:
+        - !Ref VPCLinkSecurityGroup
+      Tags:
+        Name: !Sub "${SharedStage}-${AWS::StackName}-vpc-link"
+        Project: "Business Process Management 2.0"
+        Department: "IT"
+        Environment: !Ref SharedStage
+
+  # =============================================================================
+  # APPLICATION LOAD BALANCER
+  # =============================================================================
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${AWS::StackName}-alb"
+      Scheme: internal
+      Type: application
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets:
+        - !Ref SubnetPrivate
+        - !Ref SubnetPrivate2
+      Tags:
+        - Key: Name
+          Value: !Sub "${SharedStage}-${AWS::StackName}-alb"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !Ref SharedStage
+
+  ApplicationLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: 404
+            ContentType: text/plain
+            MessageBody: "No matching service"
+
+  # =============================================================================
+  # S3 DEPLOYMENT BUCKET
+  # =============================================================================
+  DeploymentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-deployment-artifacts"
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Name
+          Value: !Sub "${SharedStage}-${AWS::StackName}-deployment-artifacts"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !Ref SharedStage
+
+  # =============================================================================
+  # ECR REPOSITORIES
+  # =============================================================================
+  ServerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${AWS::StackName}/server"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: MUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 20 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 20
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub "${SharedStage}-${AWS::StackName}-server-repository"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !Ref SharedStage
+
+  MigrationRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${AWS::StackName}/migration"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: MUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 20 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 20
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub "${SharedStage}-${AWS::StackName}-migration-repository"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !Ref SharedStage
+
+Outputs:
+  SharedStage:
+    Description: Deployment shared stage
+    Value: !Ref SharedStage
+
+  ApiGatewayVpcLink:
+    Description: API Gateway VPC link for shared services
+    Value: !Ref ApiGatewayVpcLink
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiGatewayVpcLink'
+
+  ApplicationLoadBalancer:
+    Description: A reference to the Application Load Balancer
+    Value: !Ref ApplicationLoadBalancer
+    Export:
+      Name: !Sub '${AWS::StackName}-ApplicationLoadBalancer'
+
+  ApplicationLoadBalancerListener:
+    Description: HTTP listener ARN for shared ALB
+    Value: !Ref ApplicationLoadBalancerListener
+    Export:
+      Name: !Sub '${AWS::StackName}-ApplicationLoadBalancerListener'
+
+  ALBSecurityGroup:
+    Description: Security Group ID for ALB to access API services
+    Value: !Ref ALBSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-ALBSecurityGroup'
+
+  VPCLinkSecurityGroup:
+    Description: Security Group ID for VPC Link
+    Value: !Ref VPCLinkSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-VPCLinkSecurityGroup'
+
+  ECSSecurityGroup:
+    Description: Security Group ID for ECS tasks
+    Value: !Ref ECSSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-ECSSecurityGroup'
+
+  DeploymentBucketName:
+    Description: S3 Bucket name for deployment artifacts
+    Value: !Ref DeploymentBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-DeploymentBucket'
+
+  ServerRepositoryUri:
+    Description: URI of the server ECR repository
+    Value: !GetAtt ServerRepository.RepositoryUri
+    Export:
+      Name: !Sub '${AWS::StackName}-ServerRepositoryUri'
+
+  MigrationRepositoryUri:
+    Description: URI of the migration ECR repository
+    Value: !GetAtt MigrationRepository.RepositoryUri
+    Export:
+      Name: !Sub '${AWS::StackName}-MigrationRepositoryUri'

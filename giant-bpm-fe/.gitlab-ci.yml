@@ -1,0 +1,114 @@
+image: public.ecr.aws/sam/build-nodejs20.x:latest
+
+stages:
+  - test
+  - deploy
+
+.main_push_rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - src/**/*
+        - package/ui-kit/**/*
+        - scripts/deploy.sh
+        - template.yaml
+        - samconfig.toml
+        - .gitlab-ci.yml
+        - package.json
+    - if: '$BUILD_WEB && $CI_COMMIT_BRANCH == "main"'
+
+.uat_push_rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "uat"'
+      changes:
+        - src/**/*
+        - package/ui-kit/**/*
+        - scripts/deploy.sh
+        - template.yaml
+        - samconfig.toml
+        - .gitlab-ci.yml
+        - package.json
+    - if: '$BUILD_WEB && $CI_COMMIT_BRANCH == "uat"'
+
+.staging_push_rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "staging"'
+      changes:
+        - src/**/*
+        - package/ui-kit/**/*
+        - scripts/deploy.sh
+        - template.yaml
+        - samconfig.toml
+        - .gitlab-ci.yml
+        - package.json
+    - if: '$BUILD_WEB && $CI_COMMIT_BRANCH == "staging"'
+
+.pnpm_install: &pnpm_install
+  - corepack enable pnpm
+  - corepack prepare pnpm@10.10.0 --activate
+  - pnpm i
+
+.oidc_assume_role: &oidc_assume_role
+  - |
+    export $(aws sts assume-role-with-web-identity \
+      --role-arn "${AWS_ROLE_ARN}" \
+      --role-session-name "gitlab-${CI_PROJECT_NAME}-${CI_PIPELINE_ID}" \
+      --web-identity-token "${GITLAB_OIDC_TOKEN}" \
+      --duration-seconds 3600 \
+      --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
+      --output text | awk '{printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s", $1, $2, $3}')
+  - aws sts get-caller-identity
+
+deploy:main:
+  stage: deploy
+  tags:
+    - shared-docker
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  before_script:
+    - *pnpm_install
+    - *oidc_assume_role
+  script:
+    - cp -f $WEB_ENV ./.env
+    - pnpm run deploy main
+  rules:
+    - !reference [.main_push_rules, rules]
+  environment:
+    name: main
+
+deploy:staging:
+  stage: deploy
+  tags:
+    - shared-docker
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  before_script:
+    - *pnpm_install
+    - *oidc_assume_role
+  script:
+    - cp -f $WEB_ENV ./.env
+    - pnpm run deploy staging
+  rules:
+    - !reference [.staging_push_rules, rules]
+  environment:
+    name: staging
+
+deploy:uat:
+  stage: deploy
+  tags:
+    - shared-docker
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  before_script:
+    - *pnpm_install
+    - *oidc_assume_role
+  script:
+    - cp -f $WEB_ENV ./.env
+    - pnpm run deploy uat
+  rules:
+    - !reference [.uat_push_rules, rules]
+  environment:
+    name: uat

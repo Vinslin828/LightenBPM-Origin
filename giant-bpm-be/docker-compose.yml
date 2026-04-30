@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  local-db:
+    image: postgres:16.8
+    container_name: bpm-local-db
+    environment:
+      POSTGRES_DB: bpm-local-db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  test-local-e2e-db:
+    image: postgres:16.8
+    container_name: bpm-test-local-e2e-db
+    environment:
+      POSTGRES_DB: bpm-test-local-e2e-db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  postgres_test_data:

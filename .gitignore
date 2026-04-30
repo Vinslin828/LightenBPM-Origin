@@ -1,0 +1,9 @@
+# Dependency directories
+node_modules/
+
+# Environment files with credentials
+giant-bpm-be/.env
+giant-bpm-fe/.env.local
+
+# Logs
+*.log

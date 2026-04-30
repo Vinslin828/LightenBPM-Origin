@@ -1,0 +1,33 @@
+## 1. Implementation
+- [x] 1.0 Scaffold Dedicated `MigrationModule`
+  - [x] Create `MigrationService`, `MigrationController`.
+  - [x] Register in `AppModule`.
+- [x] 1.1 Implement Form Export Service & API (`GET /bpm/forms/:id/export`)
+  - [x] Gather basic form info, latest revision, tags.
+  - [x] Analyze schema to find Validation Registry dependencies.
+  - [x] Map validation internal IDs to public IDs in dependency list.
+  - [x] Construct JSON payload.
+- [x] 1.2 Implement Workflow Export Service & API (`GET /bpm/workflows/:id/export`)
+  - [x] Gather workflow info, latest revision, tags.
+  - [x] Analyze flow definition to find OrgUnit and User dependencies.
+  - [x] Map internal IDs (User/OrgUnit/Role) to Codes in dependency list.
+  - [x] Construct JSON payload.
+- [x] 1.3 Implement Import Check Logic (`POST /bpm/import/check`)
+  - [x] Validate JSON schema/protocol.
+  - [x] Check existence of Entity (by public_id) and Revision.
+  - [x] Check existence of dependencies (Orgs, Users, Validations, Bound Form).
+  - [x] Return detailed check report (including original payload).
+- [x] 1.4 Implement Import Execute Logic (`POST /bpm/import/execute`)
+  - [x] Accept `Import Check Response` body.
+  - [x] Wrap the entire logic in `prisma.$transaction`.
+  - [x] Extract original payload and re-run critical checks (Stateless Security).
+  - [x] Perform Upsert (Create new or Update existing).
+  - [x] Build ID Translation Map (Source ID -> Target ID) from dependencies.
+  - [x] Implement `FlowDefinitionVisitor` for type-safe JSON transformation.
+  - [x] Perform transformation on `flow_definition` to replace Source IDs with Target IDs.
+  - [x] Reconstruct ValidationComponentMapping using resolved Target IDs.
+- [x] 1.5 Add Permissions/Security
+  - [x] Ensure only authorized users can export/import.
+- [x] 1.6 Write E2E Tests
+  - [x] Export a form, modify it, import it back.
+  - [x] Import a form with missing dependencies (verify failure/warning).

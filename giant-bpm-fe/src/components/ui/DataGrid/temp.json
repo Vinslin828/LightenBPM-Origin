@@ -1,0 +1,81 @@
+{
+  "rows": [
+    {
+      "id": "68414bd1-c257-5b00-8dd6-c56eec8bd5e9",
+      "isNew": true,
+      "column_1": "test",
+      "64503c5e-7979-48c5-b2c4-d45fa4b02b32": "option_3_column_5",
+      "12cb55fa-5fde-4c97-8c79-c9b1c1f8fcbd": 1773825120000,
+      "28e472a4-ac3d-4774-86f7-40af52e2d0ce": 1772553600000,
+      "64cacaca-ba6e-44ca-9025-fabc25d29cd5": 3
+    },
+    {
+      "id": "d17a51ae-b041-5d77-900b-0d035fdc8727",
+      "isNew": true,
+      "column_1": "",
+      "64503c5e-7979-48c5-b2c4-d45fa4b02b32": "",
+      "12cb55fa-5fde-4c97-8c79-c9b1c1f8fcbd": 1773828840000
+    }
+  ],
+  "headers": [
+    {
+      "key": "column_1",
+      "type": "input",
+      "label": "Input",
+      "keyValue": "column_1",
+      "required": false,
+      "placeholder": "",
+      "defaultValue": ""
+    },
+    {
+      "key": "64cacaca-ba6e-44ca-9025-fabc25d29cd5",
+      "type": "number",
+      "label": "Number",
+      "keyValue": "column_2",
+      "required": false
+    },
+    {
+      "key": "28e472a4-ac3d-4774-86f7-40af52e2d0ce",
+      "type": "date",
+      "label": "Date",
+      "subtype": "date",
+      "keyValue": "column_3",
+      "required": false
+    },
+    {
+      "key": "12cb55fa-5fde-4c97-8c79-c9b1c1f8fcbd",
+      "type": "date",
+      "label": "Time",
+      "subtype": "time",
+      "keyValue": "column_4",
+      "required": true
+    },
+    {
+      "key": "64503c5e-7979-48c5-b2c4-d45fa4b02b32",
+      "type": "dropdown",
+      "label": "Dropdown",
+      "keyValue": "column_5",
+      "required": false,
+      "datasource": {
+        "type": "static",
+        "options": [
+          {
+            "key": "f3491a00-2341-470e-aef5-e3cb18c3f677",
+            "label": "Option 1",
+            "value": "option_1_column_5"
+          },
+          {
+            "key": "be8a8ed1-e521-404c-8f18-e283a1f02222",
+            "label": "Option 2",
+            "value": "option_2_column_5"
+          },
+          {
+            "key": "31e6d920-e444-4baf-abb5-b076dbda3843",
+            "label": "Option 3",
+            "value": "option_3_column_5"
+          }
+        ]
+      }
+    }
+  ]
+}

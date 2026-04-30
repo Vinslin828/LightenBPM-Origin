@@ -1,0 +1,601 @@
+//// ------------------------------------------------------
+//// THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+//// ------------------------------------------------------
+
+Table tags {
+  id Int [pk, increment]
+  name String [unique, not null]
+  description String
+  color String
+  created_by Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_by Int [not null]
+  updated_at DateTime [not null]
+}
+
+Table form_tags {
+  form_id Int [not null]
+  tag_id Int [not null]
+
+  indexes {
+    (form_id, tag_id) [pk]
+  }
+}
+
+Table workflow_tags {
+  workflow_id Int [not null]
+  tag_id Int [not null]
+
+  indexes {
+    (workflow_id, tag_id) [pk]
+  }
+}
+
+Table form_permissions {
+  id Int [pk, increment]
+  form_id Int [not null]
+  grantee_type GranteeType [not null]
+  grantee_value String [not null]
+  action PermissionAction [not null]
+}
+
+Table workflow_permissions {
+  id Int [pk, increment]
+  workflow_id Int [not null]
+  grantee_type GranteeType [not null]
+  grantee_value String [not null]
+  action PermissionAction [not null]
+}
+
+Table instance_shares {
+  id Int [pk, increment]
+  workflow_instance_id Int [not null]
+  user_id Int [not null]
+  permission String [not null]
+  reason String
+  created_by Int [not null]
+  created_at DateTime [default: `now()`, not null]
+}
+
+Table forms {
+  id Int [pk, increment]
+  public_id String [unique, not null]
+  is_template Boolean [not null, default: false]
+  is_active Boolean [not null, default: true]
+  created_by Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_by Int [not null]
+  updated_at DateTime [not null]
+}
+
+Table form_revisions {
+  id Int [pk, increment]
+  public_id String [unique, not null]
+  form_id Int [not null]
+  name String [not null]
+  description String
+  form_schema Json
+  fe_validation Json
+  version Int [not null, default: 1]
+  state RevisionState [not null, default: 'DRAFT']
+  effective_date DateTime
+  retired_date DateTime
+  created_by Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_by Int [not null]
+  updated_at DateTime [not null]
+}
+
+Table form_options {
+  id Int [pk, increment]
+  form_revision_id Int [unique, not null]
+  can_withdraw Boolean [not null, default: true]
+  can_copy Boolean [not null, default: true]
+  can_draft Boolean [not null, default: true]
+  can_delegate Boolean [not null, default: false]
+}
+
+Table workflows {
+  id Int [pk, increment]
+  public_id String [unique, not null]
+  is_active Boolean [not null, default: true]
+  serial_prefix String [not null, default: 'APP']
+  created_by Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_by Int [not null]
+  updated_at DateTime [not null]
+}
+
+Table serial_counters {
+  serial_prefix String [not null]
+  date String [not null]
+  counter Int [not null, default: 0]
+
+  indexes {
+    (serial_prefix, date) [pk]
+  }
+}
+
+Table workflow_revisions {
+  id Int [pk, increment]
+  public_id String [unique, not null]
+  workflow_id Int [not null]
+  name String [not null]
+  description String
+  flow_definition Json
+  version Int [not null, default: 1]
+  state RevisionState [not null, default: 'DRAFT']
+  created_by Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_by Int [not null]
+  updated_at DateTime [not null]
+}
+
+Table workflow_options {
+  id Int [pk, increment]
+  workflow_revision_id Int [unique, not null]
+  reuse_prior_approvals Boolean [not null, default: true]
+}
+
+Table form_workflow_bindings {
+  id Int [pk, increment]
+  form_id Int [not null]
+  workflow_id Int [not null]
+  created_by Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_by Int [not null]
+  updated_at DateTime [not null]
+}
+
+Table application_instances {
+  id Int [pk, increment]
+  serial_number String [unique, not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+}
+
+Table form_instances {
+  id Int [pk, increment]
+  public_id String [unique, not null]
+  workflow_instance_id Int [unique, not null]
+  serial_number String [not null]
+  revision_id Int [not null]
+  updated_by Int [not null]
+  updated_at DateTime
+}
+
+Table form_instance_data {
+  id Int [pk, increment]
+  form_instance_id Int [not null]
+  data Json [not null]
+  created_at DateTime [default: `now()`, not null]
+  created_by Int [not null]
+}
+
+Table workflow_instances {
+  id Int [pk, increment]
+  public_id String [unique, not null]
+  serial_number String [not null]
+  revision_id Int [not null]
+  applicant_id Int [not null]
+  submitter_id Int [not null]
+  status InstanceStatus [not null, default: 'DRAFT']
+  priority PriorityLevel [not null, default: 'NORMAL']
+  current_iteration Int [not null, default: 1]
+  created_at DateTime [default: `now()`, not null]
+  updated_by Int
+  updated_at DateTime [not null]
+}
+
+Table workflow_events {
+  id Int [pk, increment]
+  workflow_instance_id Int [not null]
+  event_type WorkflowAction [not null]
+  status_before InstanceStatus
+  status_after InstanceStatus [not null]
+  actor_id Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  details Json
+}
+
+Table workflow_instance_nodes {
+  id Int [pk, increment]
+  public_id String [unique, not null]
+  instance_id Int [not null]
+  node_key String [not null]
+  iteration Int [not null, default: 1]
+  subflow_instance_id Int
+  node_type NodeType [not null, default: 'START']
+  status NodeStatus [not null, default: 'PENDING']
+  result NodeResult
+  started_at DateTime [default: `now()`, not null]
+  completed_at DateTime
+  due_date DateTime
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+
+  indexes {
+    (instance_id, node_key, iteration) [unique]
+  }
+}
+
+Table workflow_comments {
+  id Int [pk, increment]
+  text String [not null]
+  serial_number String [not null]
+  approval_task_id Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  author_id Int [not null]
+  updated_by Int [not null]
+}
+
+Table approval_tasks {
+  id Int [pk, increment]
+  public_id String [unique, not null]
+  workflow_node_id Int [not null]
+  assignee_id Int [not null]
+  approver_group_index Int [not null, default: 0]
+  iteration Int [not null, default: 1]
+  escalated_to Int
+  status ApprovalStatus [not null, default: 'PENDING']
+  created_at DateTime [default: `now()`, not null]
+  updated_by Int
+  updated_at DateTime [not null]
+}
+
+Table favorite_workflow {
+  id Int [pk, increment]
+  workflow_id Int [not null]
+  user_id Int [not null]
+}
+
+Table form_display_order {
+  id Int [pk, increment]
+  form_ids Int[] [not null]
+  updated_at DateTime
+}
+
+Table validation_registry {
+  id Int [pk, increment]
+  public_id String [unique, not null]
+  name String [unique, not null]
+  description String
+  validation_type ValidationType
+  validation_code String
+  error_message String
+  is_active Boolean [not null, default: true]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  created_by Int [not null]
+  updated_by Int [not null]
+}
+
+Table validation_component_mapping {
+  id Int [pk, increment]
+  public_id String [unique, not null]
+  validation_id Int [not null]
+  component String [not null]
+  created_at DateTime [default: `now()`, not null]
+  created_by Int [not null]
+
+  indexes {
+    (validation_id, component) [unique]
+  }
+}
+
+Table dataset_definitions {
+  id Int [pk, increment]
+  code String [unique, not null]
+  table_name String [unique, not null]
+  name String [not null]
+  fields Json [not null]
+  source_type String [not null, default: 'DATABASE']
+  api_config Json
+  field_mappings Json
+  created_by String [not null]
+  updated_by String [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+}
+
+Table users {
+  id Int [pk, increment]
+  code String [unique, not null]
+  sub String [unique]
+  name String [not null]
+  email String [unique]
+  job_grade Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table org_units {
+  id Int [pk, increment]
+  code String [unique, not null]
+  name String [not null]
+  type OrgUnitType [not null]
+  parent_id Int
+  created_by Int
+  created_at DateTime [default: `now()`, not null]
+  updated_by Int
+  updated_at DateTime [not null]
+  deleted_at DateTime
+}
+
+Table user_default_orgs {
+  id Int [pk, increment]
+  user_id Int [unique, not null]
+  org_unit_id Int [not null]
+  updated_at DateTime [not null]
+}
+
+Table org_memberships {
+  id Int [pk, increment]
+  org_unit_id Int [not null]
+  user_id Int [not null]
+  assign_type AssignType [not null]
+  start_date DateTime [not null]
+  end_date DateTime [not null]
+  note String
+  created_by Int [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_by Int [not null]
+  updated_at DateTime [not null]
+}
+
+Table attachments {
+  id Int [pk, increment]
+  s3_key String [unique, not null]
+  field_key String [not null]
+  file_name String [not null]
+  file_size Int [not null]
+  content_type String [not null]
+  remark String
+  uploaded_by Int [not null]
+  status AttachmentStatus [not null, default: 'PENDING']
+  serial_number String
+  draft_id String
+  approval_task_id Int
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+  expires_at DateTime
+}
+
+Enum RevisionState {
+  DRAFT
+  ACTIVE
+  SCHEDULED
+  ARCHIVED
+  RETIRED
+}
+
+Enum InstanceStatus {
+  DRAFT
+  RUNNING
+  COMPLETED
+  REJECTED
+  CANCELLED
+  REPLACED
+}
+
+Enum PriorityLevel {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+Enum NodeType {
+  START
+  APPROVAL
+  CONDITION
+  JOIN
+  SUBFLOW
+  EDIT
+  END
+}
+
+Enum NodeStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+Enum NodeResult {
+  APPROVED
+  REJECTED
+  CANCELLED
+  DELEGATED
+  TIMEOUT
+}
+
+Enum AssignType {
+  HEAD
+  USER
+}
+
+Enum OrgUnitType {
+  ORG_UNIT
+  ROLE
+}
+
+Enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WAITING
+  CANCELLED
+}
+
+Enum AttachmentStatus {
+  PENDING
+  UPLOADED
+}
+
+Enum WorkflowAction {
+  SUBMIT
+  UPDATE
+  APPROVE
+  REJECT
+  WITHDRAW
+  DELEGATE
+  ESCALATE
+  COMMENT
+}
+
+Enum ValidationType {
+  CODE
+  API
+}
+
+Enum GranteeType {
+  USER
+  ORG_UNIT
+  JOB_GRADE
+  ROLE
+  EVERYONE
+}
+
+Enum PermissionAction {
+  VIEW
+  USE
+  MANAGE
+}
+
+Ref: tags.created_by > users.id
+
+Ref: tags.updated_by > users.id
+
+Ref: form_tags.form_id > forms.id [delete: Cascade]
+
+Ref: form_tags.tag_id > tags.id [delete: Cascade]
+
+Ref: workflow_tags.workflow_id > workflows.id [delete: Cascade]
+
+Ref: workflow_tags.tag_id > tags.id [delete: Cascade]
+
+Ref: form_permissions.form_id > forms.id [delete: Cascade]
+
+Ref: workflow_permissions.workflow_id > workflows.id [delete: Cascade]
+
+Ref: instance_shares.workflow_instance_id > workflow_instances.id [delete: Cascade]
+
+Ref: instance_shares.user_id > users.id
+
+Ref: instance_shares.created_by > users.id
+
+Ref: forms.created_by > users.id
+
+Ref: forms.updated_by > users.id
+
+Ref: form_revisions.form_id > forms.id [delete: Cascade]
+
+Ref: form_revisions.created_by > users.id
+
+Ref: form_revisions.updated_by > users.id
+
+Ref: form_options.form_revision_id - form_revisions.id [delete: Cascade]
+
+Ref: workflows.created_by > users.id
+
+Ref: workflows.updated_by > users.id
+
+Ref: workflow_revisions.workflow_id > workflows.id [delete: Cascade]
+
+Ref: workflow_revisions.created_by > users.id
+
+Ref: workflow_revisions.updated_by > users.id
+
+Ref: workflow_options.workflow_revision_id > workflow_revisions.id [delete: Cascade]
+
+Ref: form_workflow_bindings.form_id > forms.id [delete: Cascade]
+
+Ref: form_workflow_bindings.workflow_id > workflows.id [delete: Cascade]
+
+Ref: form_workflow_bindings.created_by > users.id
+
+Ref: form_workflow_bindings.updated_by > users.id
+
+Ref: form_instances.updated_by > users.id
+
+Ref: form_instances.workflow_instance_id > workflow_instances.id [delete: Cascade]
+
+Ref: form_instances.revision_id > form_revisions.id [delete: Cascade]
+
+Ref: form_instances.serial_number > application_instances.serial_number [delete: Cascade]
+
+Ref: form_instance_data.form_instance_id > form_instances.id [delete: Cascade]
+
+Ref: form_instance_data.created_by > users.id
+
+Ref: workflow_instances.revision_id > workflow_revisions.id [delete: Cascade]
+
+Ref: workflow_instances.applicant_id > users.id
+
+Ref: workflow_instances.submitter_id > users.id
+
+Ref: workflow_instances.updated_by > users.id
+
+Ref: workflow_instances.serial_number > application_instances.serial_number [delete: Cascade]
+
+Ref: workflow_events.workflow_instance_id > workflow_instances.id [delete: Cascade]
+
+Ref: workflow_events.actor_id > users.id
+
+Ref: workflow_instance_nodes.instance_id > workflow_instances.id
+
+Ref: workflow_instance_nodes.subflow_instance_id > workflow_instances.id
+
+Ref: workflow_comments.approval_task_id > approval_tasks.id [delete: Cascade]
+
+Ref: workflow_comments.serial_number > application_instances.serial_number [delete: Cascade]
+
+Ref: workflow_comments.author_id > users.id
+
+Ref: workflow_comments.updated_by > users.id
+
+Ref: approval_tasks.workflow_node_id > workflow_instance_nodes.id [delete: Cascade]
+
+Ref: approval_tasks.assignee_id > users.id
+
+Ref: approval_tasks.escalated_to > users.id
+
+Ref: approval_tasks.updated_by > users.id
+
+Ref: favorite_workflow.workflow_id > workflows.id
+
+Ref: favorite_workflow.user_id > users.id
+
+Ref: validation_registry.created_by > users.id
+
+Ref: validation_registry.updated_by > users.id
+
+Ref: validation_component_mapping.validation_id > validation_registry.id [delete: Cascade]
+
+Ref: validation_component_mapping.created_by > users.id
+
+Ref: org_units.parent_id - org_units.id
+
+Ref: org_units.created_by > users.id
+
+Ref: org_units.updated_by > users.id
+
+Ref: user_default_orgs.user_id - users.id [delete: Cascade]
+
+Ref: user_default_orgs.org_unit_id > org_units.id [delete: Cascade]
+
+Ref: org_memberships.org_unit_id > org_units.id
+
+Ref: org_memberships.user_id > users.id
+
+Ref: org_memberships.created_by > users.id
+
+Ref: org_memberships.updated_by > users.id
+
+Ref: attachments.serial_number > application_instances.serial_number [delete: Cascade]
+
+Ref: attachments.uploaded_by > users.id
+
+Ref: attachments.approval_task_id > approval_tasks.id [delete: Set Null]

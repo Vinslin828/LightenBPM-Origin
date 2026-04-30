@@ -1,0 +1,23 @@
+version: '3.8'
+
+# This docker-compose file runs the E2E test suite in a container
+# that shares the host machine's network. This allows it to target
+# 'localhost' or any remote server.
+
+services:
+  e2e-tester:
+    build: .
+    # Use the host's network.
+    network_mode: host
+    # Mount the source files as volumes to allow for hot-reloading of tests
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/venv
+      - /usr/src/app/.pytest_cache
+    # Pass an environment variable to enable report generation.
+    # Example: JUNIT_REPORT_PATH=reports/report.xml docker-compose ...
+    environment:
+      - JUNIT_REPORT_PATH
+    # The command here is passed as arguments to the entrypoint.sh script,
+    # which then calls pytest.
+    command: --env local

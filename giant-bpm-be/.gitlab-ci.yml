@@ -1,0 +1,634 @@
+stages:
+  - test
+  - deploy_shared_resources
+  - build_and_push_image
+  - deploy_application
+  - pre_migration
+  - migration
+  - seed
+  - update_image
+
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+
+# =============================================================================
+# TEST STAGE
+# =============================================================================
+
+# Run unit tests
+test:
+  stage: test
+  image: node:22
+  before_script:
+    - npm install -g pnpm
+  script:
+    - make install
+    - make prisma
+    - make lint
+    - make test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_REF_NAME == "main"'
+    - if: '$CI_COMMIT_REF_NAME == "staging"'
+    - if: '$CI_COMMIT_REF_NAME == "uat"'
+    - if: '$CI_COMMIT_REF_NAME == "prod"'
+
+# Run local end-to-end tests
+test-e2e-local:
+  stage: test
+  image: node:22
+  services:
+    - name: postgres:15
+      alias: test-local-e2e-db
+      variables:
+        POSTGRES_HOST_AUTH_METHOD: trust
+  variables:
+    POSTGRES_DB: test-local-e2e-db
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: password
+    DATABASE_URL: "postgresql://postgres:password@test-local-e2e-db:5432/test-local-e2e-db"
+  before_script:
+    - npm install -g pnpm
+  script:
+    - make install
+    - make prisma
+    - pnpm prisma db push
+    - pnpm run test:e2e
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_REF_NAME == "main"'
+    - if: '$CI_COMMIT_REF_NAME == "staging"'
+    - if: '$CI_COMMIT_REF_NAME == "uat"'
+    - if: '$CI_COMMIT_REF_NAME == "prod"'
+
+# Template for Docker-in-Docker jobs
+.docker_template:
+  image: docker:28
+  services:
+    - name: docker:28-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    RUNNER_SCRIPT_TIMEOUT: 1h
+  tags:
+    - docker
+
+# =============================================================================
+# SHARED RESOURCES STAGE
+# =============================================================================
+
+.deploy_shared_resources_template:
+  stage: deploy_shared_resources
+  tags:
+    - docker
+  image: public.ecr.aws/sam/build-nodejs22.x:latest
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  before_script:
+    # Load environment variables from file
+    - source $ENV
+    # Debug: check OIDC token and role ARN
+    - echo "AWS_ROLE_ARN=${AWS_ROLE_ARN}"
+    - echo "OIDC token length=${#GITLAB_OIDC_TOKEN}"
+    # Assume AWS role via OIDC (split out to see actual error)
+    - |
+      STS_OUTPUT=$(aws sts assume-role-with-web-identity \
+        --role-arn "${AWS_ROLE_ARN}" \
+        --role-session-name "gitlab-${CI_PROJECT_NAME}-${CI_PIPELINE_ID}" \
+        --web-identity-token "${GITLAB_OIDC_TOKEN}" \
+        --duration-seconds 3600 2>&1) || { echo "❌ assume-role-with-web-identity FAILED:"; echo "$STS_OUTPUT"; exit 1; }
+      export AWS_ACCESS_KEY_ID=$(echo "$STS_OUTPUT" | jq -r '.Credentials.AccessKeyId')
+      export AWS_SECRET_ACCESS_KEY=$(echo "$STS_OUTPUT" | jq -r '.Credentials.SecretAccessKey')
+      export AWS_SESSION_TOKEN=$(echo "$STS_OUTPUT" | jq -r '.Credentials.SessionToken')
+    - aws sts get-caller-identity
+  script:
+    - |
+      echo "🏗️ Deploying shared resources..."
+      chmod +x infrastructure/scripts/deploy-shared-resources.sh
+      ./infrastructure/scripts/deploy-shared-resources.sh
+      echo "✅ Shared resources deployment completed!"
+
+deploy_shared_resources_dev:
+  extends:
+    - .deploy_shared_resources_template
+  variables:
+    SHARED_STAGE: dev
+  environment:
+    name: dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+deploy_shared_resources_prod:
+  extends:
+    - .deploy_shared_resources_template
+  variables:
+    SHARED_STAGE: prod
+  environment:
+    name: prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == "prod"
+
+# =============================================================================
+# BUILD STAGE, BUILD AND PUSH ECR（SERVER/MIGRATION）
+# =============================================================================
+
+# Template for build and push jobs
+.build_and_push_template:
+  stage: build_and_push_image
+  extends:
+    - .docker_template
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  before_script:
+    # Wait for Docker daemon to be ready
+    - until docker info; do echo "Waiting for docker daemon..."; sleep 5; done
+
+    # Install packages using Alpine package manager
+    - apk add --no-cache make bash curl aws-cli
+    - aws --version
+
+    # Load environment variables from file
+    - source $ENV
+
+    # Assume AWS role via OIDC
+    - export $(aws sts assume-role-with-web-identity --role-arn "${AWS_ROLE_ARN}" --role-session-name "gitlab-${CI_PROJECT_NAME}-${CI_PIPELINE_ID}" --web-identity-token "${GITLAB_OIDC_TOKEN}" --duration-seconds 3600 --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text | awk '{printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s", $1, $2, $3}')
+
+    # Test AWS credentials
+    - aws sts get-caller-identity
+  script:
+    - |
+      echo "Building and pushing server image with tag: ${SERVER_IMAGE_TAG}"
+      make docker-server-upload VERSION=${CI_PIPELINE_IID} COMMIT_SHA=${CI_COMMIT_SHORT_SHA} BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+      echo "Building and pushing migration image with tag: ${MIGRATION_IMAGE_TAG}"
+      make docker-migration-upload
+
+build-and-push-dev:
+  extends:
+    - .build_and_push_template
+  environment:
+    name: dev
+  variables:
+    SERVER_IMAGE_TAG: "dev"
+    MIGRATION_IMAGE_TAG: "dev-${CI_PIPELINE_IID}"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+build-and-push-staging:
+  extends:
+    - .build_and_push_template
+  environment:
+    name: staging
+  variables:
+    SERVER_IMAGE_TAG: "staging"
+    MIGRATION_IMAGE_TAG: "staging-${CI_PIPELINE_IID}"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "staging"
+
+build-and-push-uat:
+  extends:
+    - .build_and_push_template
+  environment:
+    name: uat
+  variables:
+    SERVER_IMAGE_TAG: "uat"
+    MIGRATION_IMAGE_TAG: "uat-${CI_PIPELINE_IID}"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "uat"
+
+build-and-push-prod:
+  extends:
+    - .build_and_push_template
+  environment:
+    name: prod
+  variables:
+    SERVER_IMAGE_TAG: "prod"
+    MIGRATION_IMAGE_TAG: "prod-${CI_PIPELINE_IID}"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "prod"
+
+
+# =============================================================================
+# DEPLOY APPLICATION
+# =============================================================================
+
+.deploy_application_template:
+  stage: deploy_application
+  tags:
+    - docker
+  image: public.ecr.aws/sam/build-nodejs22.x:latest
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  before_script:
+    # Load environment variables from file
+    - source $ENV
+    # Assume AWS role via OIDC
+    - export $(aws sts assume-role-with-web-identity --role-arn "${AWS_ROLE_ARN}" --role-session-name "gitlab-${CI_PROJECT_NAME}-${CI_PIPELINE_ID}" --web-identity-token "${GITLAB_OIDC_TOKEN}" --duration-seconds 3600 --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text | awk '{printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s", $1, $2, $3}')
+  script:
+    - |
+      # Deploy application stack (ECS, ALB, API Gateway, Lambda)
+      echo "🚀 Deploying application stack..."
+      chmod +x infrastructure/scripts/deploy-application.sh
+      ./infrastructure/scripts/deploy-application.sh
+      echo "✅ Application deployment completed!"
+
+# Environment-specific deploy jobs
+deploy_application_dev:
+  extends:
+    - .deploy_application_template
+  variables:
+    STAGE: dev
+    SERVER_IMAGE_TAG: "dev"
+    MIGRATION_IMAGE_TAG: "dev-${CI_PIPELINE_IID}"
+    DATABASE_SCHEMA: bpm_dev
+  environment:
+    name: dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+deploy_application_staging:
+  extends:
+    - .deploy_application_template
+  variables:
+    STAGE: staging
+    SERVER_IMAGE_TAG: "staging"
+    MIGRATION_IMAGE_TAG: "staging-${CI_PIPELINE_IID}"
+    DATABASE_SCHEMA: bpm_staging
+  environment:
+    name: staging
+  rules:
+    - if: $CI_COMMIT_BRANCH == "staging"
+
+deploy_application_uat:
+  extends:
+    - .deploy_application_template
+  variables:
+    STAGE: uat
+    SERVER_IMAGE_TAG: "uat"
+    MIGRATION_IMAGE_TAG: "uat-${CI_PIPELINE_IID}"
+    DATABASE_SCHEMA: bpm_uat
+  environment:
+    name: uat
+  rules:
+    - if: $CI_COMMIT_BRANCH == "uat"
+
+deploy_application_prod:
+  extends:
+    - .deploy_application_template
+  variables:
+    STAGE: prod
+    SERVER_IMAGE_TAG: "prod"
+    MIGRATION_IMAGE_TAG: "prod-${CI_PIPELINE_IID}"
+    DATABASE_SCHEMA: bpm_prod
+  environment:
+    name: prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == "prod"
+
+
+# =============================================================================
+# PRE-MIGRATION STAGE
+# =============================================================================
+
+.pre_migration_template:
+  stage: pre_migration
+  tags:
+    - docker
+  image:
+    name: public.ecr.aws/aws-cli/aws-cli:latest
+    entrypoint: ["/bin/sh", "-c"]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  before_script:
+    # Load environment variables from file
+    - source $ENV
+    # Assume AWS role via OIDC
+    - export $(aws sts assume-role-with-web-identity --role-arn "${AWS_ROLE_ARN}" --role-session-name "gitlab-${CI_PROJECT_NAME}-${CI_PIPELINE_ID}" --web-identity-token "${GITLAB_OIDC_TOKEN}" --duration-seconds 3600 --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text | awk '{printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s", $1, $2, $3}')
+  script:
+    - |
+      echo "🔄 Running database pre-migration..."
+      chmod +x infrastructure/scripts/run-pre-migration.sh
+      ./infrastructure/scripts/run-pre-migration.sh
+      echo "✅ Pre-migration completed!"
+
+pre_migration_dev:
+  extends:
+    - .pre_migration_template
+  variables:
+    STAGE: dev
+  environment:
+    name: dev
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - prisma/migrations/**/*
+        - prisma/schema.prisma
+        - infrastructure/scripts/run-pre-migration.sh
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+      allow_failure: true
+
+pre_migration_staging:
+  extends:
+    - .pre_migration_template
+  variables:
+    STAGE: staging
+  environment:
+    name: staging
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+      changes:
+        - prisma/migrations/**/*
+        - prisma/schema.prisma
+        - infrastructure/scripts/run-pre-migration.sh
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+      when: manual
+      allow_failure: true
+
+pre_migration_uat:
+  extends:
+    - .pre_migration_template
+  variables:
+    STAGE: uat
+  environment:
+    name: uat
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "uat"'
+      changes:
+        - prisma/migrations/**/*
+        - prisma/schema.prisma
+        - infrastructure/scripts/run-pre-migration.sh
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "uat"'
+      when: manual
+      allow_failure: true
+
+pre_migration_prod:
+  extends:
+    - .pre_migration_template
+  variables:
+    STAGE: prod
+  environment:
+    name: prod
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "prod"'
+      changes:
+        - prisma/migrations/**/*
+        - prisma/schema.prisma
+        - infrastructure/scripts/run-pre-migration.sh
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "prod"'
+      when: manual
+      allow_failure: true
+
+# =============================================================================
+# MIGRATION STAGE
+# =============================================================================
+
+.migration_template:
+  stage: migration
+  image:
+    name: public.ecr.aws/aws-cli/aws-cli:latest
+    entrypoint: ["/bin/sh", "-c"]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  before_script:
+    # Load environment variables from file
+    - source $ENV
+    # Assume AWS role via OIDC
+    - export $(aws sts assume-role-with-web-identity --role-arn "${AWS_ROLE_ARN}" --role-session-name "gitlab-${CI_PROJECT_NAME}-${CI_PIPELINE_ID}" --web-identity-token "${GITLAB_OIDC_TOKEN}" --duration-seconds 3600 --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text | awk '{printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s", $1, $2, $3}')
+  script:
+    - |
+      echo "🔄 Running database migration..."
+      chmod +x infrastructure/scripts/run-migration.sh
+      ./infrastructure/scripts/run-migration.sh
+      echo "✅ Migration completed!"
+
+migration_dev:
+  extends:
+    - .migration_template
+  variables:
+    STAGE: dev
+  environment:
+    name: dev
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - prisma/migrations/**/*
+        - prisma/schema.prisma
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+      allow_failure: true
+
+migration_staging:
+  extends:
+    - .migration_template
+  variables:
+    STAGE: staging
+  environment:
+    name: staging
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+      changes:
+        - prisma/migrations/**/*
+        - prisma/schema.prisma
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+      when: manual
+      allow_failure: true
+
+migration_uat:
+  extends:
+    - .migration_template
+  variables:
+    STAGE: uat
+  environment:
+    name: uat
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "uat"'
+      changes:
+        - prisma/migrations/**/*
+        - prisma/schema.prisma
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "uat"'
+      when: manual
+      allow_failure: true
+
+migration_prod:
+  extends:
+    - .migration_template
+  variables:
+    STAGE: prod
+  environment:
+    name: prod
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "prod"'
+      changes:
+        - prisma/migrations/**/*
+        - prisma/schema.prisma
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "prod"'
+      when: manual
+      allow_failure: true
+
+# =============================================================================
+# SEED STAGE
+# =============================================================================
+
+.seed_template:
+  stage: seed
+  image:
+    name: public.ecr.aws/aws-cli/aws-cli:latest
+    entrypoint: ["/bin/sh", "-c"]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  before_script:
+    # Load environment variables from file
+    - source $ENV
+    # Assume AWS role via OIDC
+    - export $(aws sts assume-role-with-web-identity --role-arn "${AWS_ROLE_ARN}" --role-session-name "gitlab-${CI_PROJECT_NAME}-${CI_PIPELINE_ID}" --web-identity-token "${GITLAB_OIDC_TOKEN}" --duration-seconds 3600 --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text | awk '{printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s", $1, $2, $3}')
+  script:
+    - |
+      echo "🌱 Running database seed..."
+      chmod +x infrastructure/scripts/run-seed.sh
+      ./infrastructure/scripts/run-seed.sh
+      echo "✅ Seed completed!"
+
+seed_dev:
+  extends:
+    - .seed_template
+  variables:
+    STAGE: dev
+  environment:
+    name: dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - prisma/seed.ts
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+
+seed_staging:
+  extends:
+    - .seed_template
+  variables:
+    STAGE: staging
+  environment:
+    name: staging
+  rules:
+    - if: $CI_COMMIT_BRANCH == "staging"
+      changes:
+        - prisma/seed.ts
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == "staging"
+      when: manual
+      allow_failure: true
+
+seed_uat:
+  extends:
+    - .seed_template
+  variables:
+    STAGE: uat
+  environment:
+    name: uat
+  rules:
+    - if: $CI_COMMIT_BRANCH == "uat"
+      changes:
+        - prisma/seed.ts
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == "uat"
+      when: manual
+      allow_failure: true
+
+seed_prod:
+  extends:
+    - .seed_template
+  variables:
+    STAGE: prod
+  environment:
+    name: prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == "prod"
+      changes:
+        - prisma/seed.ts
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == "prod"
+      when: manual
+      allow_failure: true
+
+# =============================================================================
+# SERVICE UPDATE STAGE
+# =============================================================================
+
+.update_image_template:
+  stage: update_image
+  image:
+    name: public.ecr.aws/aws-cli/aws-cli:latest
+    entrypoint: ["/bin/sh", "-c"]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  before_script:
+    # Load environment variables from file
+    - source $ENV
+    # Assume AWS role via OIDC
+    - export $(aws sts assume-role-with-web-identity --role-arn "${AWS_ROLE_ARN}" --role-session-name "gitlab-${CI_PROJECT_NAME}-${CI_PIPELINE_ID}" --web-identity-token "${GITLAB_OIDC_TOKEN}" --duration-seconds 3600 --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text | awk '{printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s", $1, $2, $3}')
+  script:
+    - |
+      # Update ECS service to pull latest server image
+      echo "🔄 Updating ECS service to latest server image..."
+      chmod +x infrastructure/scripts/update-image.sh
+      ./infrastructure/scripts/update-image.sh
+      echo "✅ Service update completed!"
+
+update_image_dev:
+  extends:
+    - .update_image_template
+  variables:
+    STAGE: dev
+  environment:
+    name: dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+update_image_staging:
+  extends:
+    - .update_image_template
+  variables:
+    STAGE: staging
+  environment:
+    name: staging
+  rules:
+    - if: $CI_COMMIT_BRANCH == "staging"
+
+update_image_uat:
+  extends:
+    - .update_image_template
+  variables:
+    STAGE: uat
+  environment:
+    name: uat
+  rules:
+    - if: $CI_COMMIT_BRANCH == "uat"
+
+update_image_prod:
+  extends:
+    - .update_image_template
+  variables:
+    STAGE: prod
+  environment:
+    name: prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == "prod"

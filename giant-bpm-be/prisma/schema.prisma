@@ -1,0 +1,793 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator dbml {
+  provider = "prisma-dbml-generator"
+  includeRelationFields = false
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+/*
+ *  Enum States:
+    - DRAFT: A revision being created or modified.
+    - SCHEDULED: A draft that is set to become active at a future time.
+    - ACTIVE: The current, live revision.
+    - ARCHIVED: A previously active revision, which can be reactivated.
+    - RETIRED: An archived revision that is now considered obsolete and cannot be used again.
+    State Transitions:
+    - DRAFT -> ACTIVE (Direct activation)
+    - DRAFT -> SCHEDULED (Scheduling for future activation)
+    - SCHEDULED -> ACTIVE (When the scheduled time is reached)
+    - ACTIVE -> ARCHIVED (When a different revision becomes active)
+    - ARCHIVED -> ACTIVE (Reactivating an old version; the rollback path)
+    - ARCHIVED -> RETIRED (Permanently disabling an old version)
+ */
+enum RevisionState {
+  DRAFT
+  ACTIVE
+  SCHEDULED
+  ARCHIVED
+  RETIRED
+}
+
+enum InstanceStatus {
+  DRAFT
+  RUNNING
+  COMPLETED
+  REJECTED
+  CANCELLED
+  REPLACED    // 被更新為新版本
+}
+
+enum PriorityLevel {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum NodeType {
+  START
+  APPROVAL
+  CONDITION
+  JOIN
+  SUBFLOW
+  EDIT
+  END
+}
+
+enum NodeStatus {
+  PENDING   // 等待處理
+  COMPLETED // 已完成（透過result欄位區分approved/rejected）
+  FAILED    // 失敗/系統錯誤
+}
+
+enum NodeResult {
+  APPROVED
+  REJECTED
+  CANCELLED  // 被動中斷（因為其他 node reject 或 workflow 被取消）
+  DELEGATED
+  TIMEOUT
+}
+
+enum AssignType {
+  HEAD
+  USER
+}
+
+enum OrgUnitType {
+  ORG_UNIT
+  ROLE
+}
+
+enum ApprovalStatus {
+  PENDING   // 待審批
+  APPROVED  // 已批准
+  REJECTED  // 已拒絕
+  WAITING   // 等待前序審批完成（用於順序性審批）
+  CANCELLED // 因工作流終止而取消
+}
+
+enum AttachmentStatus {
+  PENDING    // Presigned URL issued, awaiting S3 upload
+  UPLOADED   // File confirmed in S3
+}
+
+enum WorkflowAction {
+  SUBMIT    //Submit a new application
+  UPDATE    //Update an existing application
+  APPROVE   //Approve an application
+  REJECT    //Reject an application
+  WITHDRAW  //Withdraw an application
+  DELEGATE  //Delegate an application
+  ESCALATE  //Escalate an application
+  COMMENT   //Comment on an application
+}
+
+enum ValidationType {
+  CODE
+  API
+}
+
+enum GranteeType {
+  USER
+  ORG_UNIT
+  JOB_GRADE
+  ROLE
+  EVERYONE
+}
+
+enum PermissionAction {
+  VIEW
+  USE
+  MANAGE
+}
+
+//Tag System
+model Tag {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  description String?
+  color     String?
+  created_by Int
+  created_at DateTime @default(now())
+  updated_by Int
+  updated_at DateTime @updatedAt
+
+  @@map("tags")
+
+  // NOTE: Relations
+  creator User      @relation("TagCreator", fields: [created_by], references: [id])
+  updater User      @relation("TagUpdater", fields: [updated_by], references: [id])
+  forms   FormTag[]
+  WorkflowTag WorkflowTag[]
+}
+
+model FormTag {
+  form_id Int
+  tag_id  Int
+
+  @@id([form_id, tag_id])
+  @@map("form_tags")
+
+  // NOTE: Relations
+  form Form @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+}
+
+model WorkflowTag {
+  workflow_id Int
+  tag_id      Int
+
+  @@id([workflow_id, tag_id])
+  @@map("workflow_tags")
+
+  // NOTE: Relations
+  workflow Workflow @relation(fields: [workflow_id], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+}
+
+// Permission System Models
+model FormPermission {
+  id            Int             @id @default(autoincrement())
+  form_id       Int
+  grantee_type  GranteeType
+  grantee_value String          // ID/Code of the user, org, or level
+  action        PermissionAction
+
+  form          Form            @relation(fields: [form_id], references: [id], onDelete: Cascade)
+
+  @@index([form_id])
+  @@index([grantee_type, grantee_value])
+  @@map("form_permissions")
+}
+
+model WorkflowPermission {
+  id            Int             @id @default(autoincrement())
+  workflow_id   Int
+  grantee_type  GranteeType
+  grantee_value String          // ID/Code of the user, org, or level
+  action        PermissionAction
+
+  workflow      Workflow        @relation(fields: [workflow_id], references: [id], onDelete: Cascade)
+
+  @@index([workflow_id])
+  @@index([grantee_type, grantee_value])
+  @@map("workflow_permissions")
+}
+
+model InstanceShare {
+  id                  Int      @id @default(autoincrement())
+  workflow_instance_id Int
+  user_id             Int      // The user granted access
+  permission          String   // 'VIEW'
+  reason              String?
+  created_by          Int
+  created_at          DateTime @default(now())
+
+  instance            WorkflowInstance @relation(fields: [workflow_instance_id], references: [id], onDelete: Cascade)
+  user                User             @relation("SharedUser", fields: [user_id], references: [id])
+  creator             User             @relation("ShareCreator", fields: [created_by], references: [id])
+
+  @@map("instance_shares")
+}
+
+//Form related models
+model Form {
+  id          Int      @id @default(autoincrement())
+  public_id    String   @unique
+  is_template  Boolean  @default(false) //If true, this form is a template and cannot be submitted directly
+  is_active    Boolean  @default(true)
+  created_by   Int
+  created_at   DateTime @default(now())
+  updated_by   Int
+  updated_at   DateTime @updatedAt
+
+  @@map("forms")
+
+  //NOTE: Relations
+  creator                User                    @relation("FormCreator", fields: [created_by], references: [id])
+  updater                User                    @relation("FormUpdater", fields: [updated_by], references: [id])
+  form_revisions         FormRevision[]
+  form_workflow_bindings FormWorkflowBinding[]
+  form_tag               FormTag[]
+  permissions            FormPermission[]
+}
+
+model FormRevision {
+  id            Int        @id @default(autoincrement())
+  public_id      String     @unique
+  form_id        Int
+  name          String
+  description   String?
+  form_schema    Json?
+  fe_validation  Json?
+  version       Int        @default(1)
+  state        RevisionState @default(DRAFT)
+  effective_date DateTime?
+  retired_date   DateTime?
+  created_by     Int
+  created_at     DateTime   @default(now())
+  updated_by     Int
+  updated_at     DateTime   @updatedAt
+
+  // NOTE: Relations are commented out due to type inconsistencies.
+  form          Form           @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  creator       User           @relation("FormRevisionCreator", fields: [created_by], references: [id])
+  updater       User           @relation("FormRevisionUpdater", fields: [updated_by], references: [id])
+  form_instances FormInstance[]
+
+  @@map("form_revisions")
+  options FormOptions?
+}
+
+model FormOptions {
+  id            Int      @id @default(autoincrement())
+  form_revision_id Int     @unique
+  can_withdraw   Boolean    @default(true)
+  can_copy       Boolean    @default(true)
+  can_draft      Boolean    @default(true)
+  can_delegate   Boolean    @default(false)
+
+  @@map("form_options")
+  // NOTE: Relations
+  form_revision FormRevision @relation(fields: [form_revision_id], references: [id], onDelete: Cascade)
+}
+
+//Workflow related models
+model Workflow {
+  id               Int                 @id @default(autoincrement())
+  public_id         String              @unique
+  is_active         Boolean             @default(true)
+  serial_prefix     String              @default("APP") @db.VarChar(3)
+  created_by        Int
+  created_at        DateTime            @default(now())
+  updated_by        Int
+  updated_at        DateTime            @updatedAt
+
+  @@map("workflows")
+  // NOTE: Relations
+  creator                User                    @relation("WorkflowCreator", fields: [created_by], references: [id])
+  updater                User                    @relation("WorkflowUpdater", fields: [updated_by], references: [id])
+  workflow_revisions     WorkflowRevisions[]
+  form_workflow_bindings FormWorkflowBinding[]
+  workflow_tags WorkflowTag[]
+  favorite_workflows FavoriteWorkflow[]
+  permissions        WorkflowPermission[]
+}
+
+model SerialCounter {
+  serial_prefix String @db.VarChar(3)
+  date          String
+  counter       Int    @default(0)
+
+  @@id([serial_prefix, date])
+  @@map("serial_counters")
+}
+
+model WorkflowRevisions {
+  id          Int      @id @default(autoincrement())
+  public_id    String   @unique
+  workflow_id  Int
+  name        String
+  description String?
+  flow_definition Json?
+  version     Int      @default(1)
+  state      RevisionState   @default(DRAFT)
+  created_by   Int
+  created_at   DateTime @default(now())
+  updated_by   Int
+  updated_at   DateTime @updatedAt
+
+  @@map("workflow_revisions")
+
+  // NOTE: Relations
+  workflow Workflow @relation(fields: [workflow_id], references: [id], onDelete: Cascade)
+  creator  User     @relation("WorkflowRevisionCreator", fields: [created_by], references: [id])
+  updater  User     @relation("WorkflowRevisionUpdater", fields: [updated_by], references: [id])
+  workflow_instances WorkflowInstance[]
+  options WorkflowOptions[]
+}
+
+model WorkflowOptions {
+  id                    Int      @id @default(autoincrement())
+  workflow_revision_id  Int      @unique
+  reuse_prior_approvals Boolean  @default(true) //If true, the prior approvals can be reused during flow engine processing the flow nodes.
+
+  @@map("workflow_options")
+  // NOTE: Relations
+  workflow_revision WorkflowRevisions @relation(fields: [workflow_revision_id], references: [id], onDelete: Cascade)
+}
+
+//Binding between Form and Workflow
+model FormWorkflowBinding {
+  id         Int      @id @default(autoincrement())
+  form_id     Int
+  workflow_id Int
+  created_by  Int
+  created_at  DateTime @default(now())
+  updated_by  Int
+  updated_at  DateTime @updatedAt
+
+  @@map("form_workflow_bindings")
+
+  // NOTE: Relations
+  form     Form     @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  workflow Workflow @relation(fields: [workflow_id], references: [id], onDelete: Cascade)
+  creator  User     @relation("BindingCreator", fields: [created_by], references: [id])
+  updater  User     @relation("BindingUpdater", fields: [updated_by], references: [id])
+}
+
+
+//Instance related models
+model ApplicationInstance {
+  id                   Int        @id @default(autoincrement())
+  serial_number        String     @unique //Application Serial Number which is use for application tracking
+  created_at          DateTime    @default(now())
+  updated_at          DateTime    @updatedAt
+ 
+  @@map("application_instances")
+
+  // NOTE: Relations
+  form_instance FormInstance[]
+  workflow_instance WorkflowInstance[]
+  comments WorkflowComment[]
+  attachments          Attachment[]
+}
+
+model FormInstance {
+  id                 Int               @id @default(autoincrement())
+  public_id           String            @unique
+  workflow_instance_id Int              @unique
+  serial_number      String           //Application Serial Number which is use for application tracking
+  revision_id         Int
+  updated_by          Int
+  updated_at          DateTime?          @updatedAt
+
+  @@map("form_instances")
+
+  // NOTE: Relations
+  updater          User              @relation("FormInstanceUpdater", fields: [updated_by], references: [id])
+  workflow_instance WorkflowInstance @relation(fields: [workflow_instance_id], references: [id], onDelete: Cascade)
+  form_revision      FormRevision       @relation(fields: [revision_id], references: [id], onDelete: Cascade)
+  application_instance ApplicationInstance? @relation(fields: [serial_number], references: [serial_number], onDelete: Cascade)
+  data_history         FormInstanceData[]
+}
+
+model FormInstanceData {
+  id               Int          @id @default(autoincrement())
+  form_instance_id Int
+  data             Json         // The actual form data content
+  
+  created_at       DateTime     @default(now()) // Version timestamp
+  created_by       Int          // The editor
+  
+  form_instance    FormInstance @relation(fields: [form_instance_id], references: [id], onDelete: Cascade)
+  creator          User         @relation("FormInstanceDataCreator", fields: [created_by], references: [id])
+  
+  @@map("form_instance_data")
+}
+
+model WorkflowInstance {
+  id                Int            @id @default(autoincrement())
+  public_id          String         @unique
+  serial_number      String        //Application Serial Number which is use for application tracking
+  revision_id        Int
+  applicant_id       Int
+  submitter_id       Int
+  status             InstanceStatus @default(DRAFT)
+  priority           PriorityLevel  @default(NORMAL)
+  current_iteration  Int            @default(1)
+  created_at         DateTime       @default(now())
+  updated_by         Int?           // User who last updated this instance, null represents system update
+  updated_at         DateTime       @updatedAt
+
+  @@map("workflow_instances")
+
+  // NOTE: Relations
+  revision          WorkflowRevisions @relation(fields: [revision_id], references: [id], onDelete: Cascade)
+  applicant         User              @relation("Applicant", fields: [applicant_id], references: [id])
+  submitter         User              @relation("Submitter", fields: [submitter_id], references: [id])
+  updater           User?             @relation("WorkflowInstanceUpdater", fields: [updated_by], references: [id])
+  workflow_nodes    WorkflowNode[]    @relation("WorkflowInstance")
+  subflow_nodes     WorkflowNode[]    @relation("SubflowInstance")
+  application_instance ApplicationInstance @relation(fields: [serial_number], references: [serial_number], onDelete: Cascade)
+  form_instances    FormInstance[]
+  events            WorkflowEvent[]
+  instance_shares   InstanceShare[]
+}
+
+model WorkflowEvent {
+  id                   Int            @id @default(autoincrement())
+  workflow_instance_id Int
+  
+  event_type           WorkflowAction 
+  status_before        InstanceStatus?
+  status_after         InstanceStatus
+  
+  actor_id             Int            
+  created_at           DateTime       @default(now())
+  details              Json?          // Extra info (e.g. comment snapshot, reason)
+  
+  workflow_instance    WorkflowInstance @relation(fields: [workflow_instance_id], references: [id], onDelete: Cascade)
+  actor                User             @relation("WorkflowEventActor", fields: [actor_id], references: [id])
+  
+  @@map("workflow_events")
+}
+
+//FlowEngine models (WorkflowNodes)
+//TODO: review the implementaion of workflow nodes and flow engine; may need to adjust for flow control
+model WorkflowNode {
+  id                  Int               @id @default(autoincrement())
+  public_id           String            @unique
+  instance_id         Int
+  node_key            String
+  iteration           Int               @default(1)
+  subflow_instance_id Int?
+  node_type           NodeType          @default(START)
+  status              NodeStatus        @default(PENDING)
+  result              NodeResult?
+  started_at          DateTime          @default(now())
+  completed_at        DateTime?
+  due_date            DateTime?
+  created_at          DateTime          @default(now())
+  updated_at          DateTime         @updatedAt
+
+  @@unique([instance_id, node_key, iteration])
+  @@map("workflow_instance_nodes")
+
+  // NOTE: Relations
+  workflow_instance          WorkflowInstance  @relation("WorkflowInstance", fields: [instance_id], references: [id])
+  subflow_instance           WorkflowInstance? @relation("SubflowInstance", fields: [subflow_instance_id], references: [id])
+  approval_tasks             ApprovalTask[]
+}
+
+model WorkflowComment {
+  id               Int      @id @default(autoincrement())
+  text             String
+  serial_number    String       //Application Serial Number which is use for application tracking
+  approval_task_id Int
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+  author_id        Int
+  updated_by       Int
+
+  @@map("workflow_comments")
+
+  //NOTE: Relations
+  approval_task        ApprovalTask        @relation(fields: [approval_task_id], references: [id], onDelete: Cascade)
+  application_instance ApplicationInstance @relation(fields: [serial_number], references: [serial_number], onDelete: Cascade)
+  author               User                @relation("CommentAuthor", fields: [author_id], references: [id])
+  updater              User                @relation("CommentUpdater", fields: [updated_by], references: [id])
+}
+
+model ApprovalTask {
+  id                   Int            @id @default(autoincrement())
+  public_id            String         @unique
+  workflow_node_id     Int
+  assignee_id          Int
+  approver_group_index Int            @default(0)
+  iteration            Int            @default(1)
+  escalated_to         Int?
+  status               ApprovalStatus @default(PENDING)
+  created_at           DateTime       @default(now())
+  updated_by           Int?           // User who last updated this task, null means system update
+  updated_at           DateTime       @updatedAt
+
+  @@map("approval_tasks")
+
+  // NOTE: Relations
+  workflow_node      WorkflowNode      @relation(fields: [workflow_node_id], references: [id], onDelete: Cascade)
+  assignee           User              @relation("Approver", fields: [assignee_id], references: [id])
+  escalated_user     User?             @relation("EscalatedUser", fields: [escalated_to], references: [id])
+  updater            User?             @relation("ApprovalTaskUpdater", fields: [updated_by], references: [id])
+  comments           WorkflowComment[]
+  attachments        Attachment[]
+}
+
+model FavoriteWorkflow {
+  id                      Int            @id @default(autoincrement())
+  workflow_id             Int
+  user_id                 Int
+
+  @@map("favorite_workflow")
+
+  workflows               Workflow       @relation(fields: [workflow_id], references: [id])
+  users                   User           @relation(fields: [user_id], references: [id])
+}
+
+
+// To manage the display order of forms and categories in the UI
+model FormDisplayOrder {
+  id        Int      @id @default(autoincrement())
+  form_ids   Int[]
+  updated_at DateTime? @updatedAt
+
+  @@map("form_display_order")
+}
+
+// Validation Registry System
+model ValidationRegistry {
+  // Primary keys
+  id        Int    @id @default(autoincrement())
+  public_id String @unique
+
+  // Basic information
+  name        String  @unique @db.VarChar(255)
+  description String?
+
+  // Validation type and content
+  validation_type ValidationType?
+  validation_code String?
+
+  // Error message
+  error_message String? @db.VarChar(500)
+
+  // Status
+  is_active Boolean @default(true)
+
+  // Audit fields
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int
+  updated_by Int
+
+  // Relations
+  components ValidationComponentMapping[]
+  creator    User                         @relation("ValidationRegistryCreator", fields: [created_by], references: [id])
+  updater    User                         @relation("ValidationRegistryUpdater", fields: [updated_by], references: [id])
+
+  // Indexes
+  @@index([name])
+  @@index([validation_type])
+  @@index([is_active])
+  @@index([created_at(sort: Desc)])
+
+  @@map("validation_registry")
+}
+
+model ValidationComponentMapping {
+  // Primary keys
+  id        Int    @id @default(autoincrement())
+  public_id String @unique
+
+  // Relation fields
+  validation_id Int
+  component     String @db.VarChar(100)
+
+  // Audit fields
+  created_at DateTime @default(now())
+  created_by Int
+
+  // Relations
+  validation ValidationRegistry @relation(fields: [validation_id], references: [id], onDelete: Cascade)
+  creator    User              @relation("ValidationComponentMappingCreator", fields: [created_by], references: [id])
+
+  // Unique constraint
+  @@unique([validation_id, component], name: "uq_validation_component")
+
+  // Indexes
+  @@index([validation_id])
+  @@index([component])
+
+  @@map("validation_component_mapping")
+}
+
+// Master Data Management Models
+model DatasetDefinition {
+  id             Int      @id @default(autoincrement())
+  code           String   @unique // Logical ID
+  table_name     String   @unique // Physical Table Name
+  name           String
+  fields         Json     // Array of { name: string, type: 'TEXT'|'NUMBER', required: boolean }
+  source_type    String   @default("DATABASE") // "DATABASE" | "EXTERNAL_API"
+  api_config     Json?    // { url, method, headers?, body? } - only for EXTERNAL_API
+  field_mappings Json?    // { records_path, mappings: [{ field_name, json_path }] } - only for EXTERNAL_API
+  created_by     String   // User Code
+  updated_by     String   // User Code
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@map("dataset_definitions")
+}
+
+//User Model
+model User {
+  id                        Int                 @id @default(autoincrement())
+  code                      String              @unique
+  sub                       String?             @unique //Auth0 sub
+  name                      String
+  email                     String?             @unique
+  job_grade                 Int
+  created_at                 DateTime            @default(now())
+  updated_at                 DateTime            @updatedAt
+  deleted_at                 DateTime?
+
+  @@map("users")
+  default_org_preference    UserDefaultOrg?
+  org_memberships           OrgMembership[]
+  form_revisions             FormRevision[]      @relation("FormRevisionCreator")
+  workflow_revisions         WorkflowRevisions[] @relation("WorkflowRevisionCreator")
+  form_instances             FormInstance[]      @relation("FormInstanceUpdater")
+  applied_workflows          WorkflowInstance[]  @relation("Applicant")
+  submitted_workflows        WorkflowInstance[]  @relation("Submitter")
+  tags                       Tag[]               @relation("TagCreator")
+  approval_tasks             ApprovalTask[]      @relation("Approver")
+  escalated_approvals        ApprovalTask[]      @relation("EscalatedUser")
+  favorite_workflows         FavoriteWorkflow[]
+  workflow_comments          WorkflowComment[]   @relation("CommentAuthor")
+  created_forms              Form[]              @relation("FormCreator")
+  created_workflows          Workflow[]          @relation("WorkflowCreator")
+  created_org_units          OrgUnit[]           @relation("OrgUnitCreator")
+  created_org_memberships    OrgMembership[]     @relation("OrgMembershipCreator")
+  form_instance_data         FormInstanceData[]  @relation("FormInstanceDataCreator")
+  workflow_events            WorkflowEvent[]     @relation("WorkflowEventActor")
+
+  // Updated/Other relations
+  updated_tags               Tag[]               @relation("TagUpdater")
+  updated_forms              Form[]              @relation("FormUpdater")
+  updated_form_revisions     FormRevision[]      @relation("FormRevisionUpdater")
+  updated_workflows          Workflow[]          @relation("WorkflowUpdater")
+  updated_workflow_revisions WorkflowRevisions[] @relation("WorkflowRevisionUpdater")
+  created_bindings           FormWorkflowBinding[] @relation("BindingCreator")
+  updated_bindings           FormWorkflowBinding[] @relation("BindingUpdater")
+  updated_org_units          OrgUnit[]           @relation("OrgUnitUpdater")
+  updated_org_memberships    OrgMembership[]     @relation("OrgMembershipUpdater")
+  updated_workflow_instances WorkflowInstance[]  @relation("WorkflowInstanceUpdater")
+  updated_approval_tasks     ApprovalTask[]      @relation("ApprovalTaskUpdater")
+  updated_comments           WorkflowComment[]   @relation("CommentUpdater")
+  received_shares            InstanceShare[]     @relation("SharedUser")
+  created_shares             InstanceShare[]     @relation("ShareCreator")
+
+  // Validation Registry relations
+  created_validation_registries  ValidationRegistry[]         @relation("ValidationRegistryCreator")
+  updated_validation_registries  ValidationRegistry[]         @relation("ValidationRegistryUpdater")
+  created_validation_mappings    ValidationComponentMapping[] @relation("ValidationComponentMappingCreator")
+  uploaded_attachments           Attachment[]                @relation("AttachmentUploader")
+}
+
+// Organization Unit Model
+model OrgUnit {
+  id                Int              @id @default(autoincrement())
+  code              String           @unique
+  name              String
+  type              OrgUnitType
+  parent_id         Int?
+  created_by        Int?
+  created_at        DateTime         @default(now())
+  updated_by        Int?            // User who last updated this instance, null represents system update
+  updated_at        DateTime        @updatedAt
+  deleted_at        DateTime?
+
+  @@map("org_units")
+
+  // Self-referencing relation for parent-child hierarchy
+  parent            OrgUnit?         @relation("OrgUnitHierarchy", fields: [parent_id], references: [id])
+  children          OrgUnit[]        @relation("OrgUnitHierarchy")
+
+  // Relations
+  preferred_by_users UserDefaultOrg[]
+  members           OrgMembership[]
+  creator           User?            @relation("OrgUnitCreator", fields: [created_by], references: [id])
+  updater           User?            @relation("OrgUnitUpdater", fields: [updated_by], references: [id])
+}
+
+// User Default Organization Preference Mapping
+model UserDefaultOrg {
+  id          Int      @id @default(autoincrement())
+  user_id     Int      @unique
+  org_unit_id Int
+  updated_at  DateTime @updatedAt
+
+  @@map("user_default_orgs")
+
+  // Relations
+  user     User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  org_unit OrgUnit @relation(fields: [org_unit_id], references: [id], onDelete: Cascade)
+}
+
+// Organization User Mapping Model
+model OrgMembership {
+  id            Int        @id @default(autoincrement())
+  org_unit_id   Int
+  user_id       Int
+  assign_type   AssignType
+  start_date    DateTime
+  end_date      DateTime
+  note          String?
+  created_by    Int
+  created_at    DateTime   @default(now())
+  updated_by    Int
+  updated_at    DateTime   @updatedAt
+
+  @@map("org_memberships")
+
+  // Relations
+  org_unit      OrgUnit    @relation(fields: [org_unit_id], references: [id])
+  user          User       @relation(fields: [user_id], references: [id])
+  creator       User       @relation("OrgMembershipCreator", fields: [created_by], references: [id])
+  updater       User       @relation("OrgMembershipUpdater", fields: [updated_by], references: [id])
+}
+
+// Attachment Model
+model Attachment {
+  id            Int              @id @default(autoincrement())
+  s3_key        String           @unique
+  field_key     String           // Form component name (DB-level tracking)
+  file_name     String
+  file_size     Int
+  content_type  String
+  remark        String?
+  uploaded_by   Int
+  status        AttachmentStatus @default(PENDING)
+
+  // Binding context
+  serial_number String?                    // Set when bound to an application instance
+  draft_id      String?                    // Backend-generated UUID, cleared after binding
+
+  // Upload context: null = applicant upload at START (no approval task yet);
+  // set = approver upload while that specific task was PENDING
+  approval_task_id Int?
+
+  created_at    DateTime         @default(now())
+  updated_at    DateTime         @updatedAt
+  expires_at    DateTime?                  // For PENDING cleanup
+
+  @@index([serial_number, field_key])
+  @@index([draft_id])
+  @@index([uploaded_by])
+  @@index([expires_at])
+  @@index([approval_task_id])
+  @@map("attachments")
+
+  // Relations
+  application_instance ApplicationInstance? @relation(fields: [serial_number], references: [serial_number], onDelete: Cascade)
+  uploader             User                @relation("AttachmentUploader", fields: [uploaded_by], references: [id])
+  approval_task        ApprovalTask?       @relation(fields: [approval_task_id], references: [id], onDelete: SetNull)
+}

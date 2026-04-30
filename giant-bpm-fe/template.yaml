@@ -1,0 +1,248 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  bpm-web
+
+  SAM for bpm-web
+
+Parameters:
+  DeploymentType:
+    AllowedValues:
+      - "dev"
+      - "staging"
+      - "uat"
+      - "prod"
+    Default: "dev"
+    Description: "which stack to deploy, default is dev"
+    Type: String
+  AWSCachingOptimized:
+    Description: AWS managed cache policy for CloudFront
+    Type: String
+    Default: "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  DomainName:
+    Description: DomainName for the CloudFront distribution
+    Type: String
+    Default: ""
+  ACMCertificate:
+    Description: ACM Certificate ARN for the CloudFront distribution
+    Type: String
+    Default: ""
+
+Mappings:
+  StageToEnvironment:
+    dev:
+      Tag: dev
+    staging:
+      Tag: stag
+    uat:
+      Tag: sandbox
+    prod:
+      Tag: prod
+
+Conditions:
+  IsProduction: !Equals [!Ref DeploymentType, "prod"]
+  HasCustomDomain: !Not [!Equals [!Ref DomainName, ""]]
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  WebS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref DeploymentType, Tag]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+
+  WebS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebS3Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontAccess
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${WebS3Bucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebCloudFront}
+          - Sid: DenyNonSSLRequests
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt WebS3Bucket.Arn
+              - !Sub ${WebS3Bucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  # SSLCertificate:
+  #   Type: AWS::CertificateManager::Certificate
+  #   Properties:
+  #     DomainName: !Ref DomainName
+  #     ValidationMethod: DNS
+
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${AWS::StackName}-OAC
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # S3 bucket for CloudFront access logs (PR.5)
+  CloudFrontLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-cf-logs-${AWS::AccountId}
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-cf-logs"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref DeploymentType, Tag]
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  WebCloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-cloudfront"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref DeploymentType, Tag]
+      DistributionConfig:
+        Origins:
+          - DomainName: !GetAtt WebS3Bucket.RegionalDomainName
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
+          # Failover origin using same S3 bucket (PR.4)
+          - DomainName: !GetAtt WebS3Bucket.RegionalDomainName
+            Id: S3OriginFailover
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
+        # Origin group for failover (PR.4)
+        OriginGroups:
+          Quantity: 1
+          Items:
+            - Id: S3OriginGroup
+              FailoverCriteria:
+                StatusCodes:
+                  Items:
+                    - 500
+                    - 502
+                    - 503
+                    - 504
+                  Quantity: 4
+              Members:
+                Quantity: 2
+                Items:
+                  - OriginId: S3Origin
+                  - OriginId: S3OriginFailover
+        Enabled: true
+        HttpVersion: "http2"
+        DefaultRootObject: index.html
+        # CloudFront access logging (PR.5)
+        Logging:
+          Bucket: !GetAtt CloudFrontLogBucket.DomainName
+          IncludeCookies: false
+          Prefix: cloudfront/
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: !If
+            - IsProduction
+            - !Ref AWSCachingOptimized
+            - "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # CachingDisabled policy
+        PriceClass: !If
+          - IsProduction
+          - PriceClass_All
+          - PriceClass_100
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        Aliases: !If
+          - HasCustomDomain
+          - - !Ref DomainName
+          - !Ref AWS::NoValue
+        ViewerCertificate: !If
+          - HasCustomDomain
+          - AcmCertificateArn: !Ref ACMCertificate
+            MinimumProtocolVersion: TLSv1.2_2021
+            SslSupportMethod: sni-only
+          # TLS 1.2 minimum even without custom domain (PR.9)
+          - MinimumProtocolVersion: TLSv1.2_2021
+            CloudFrontDefaultCertificate: true
+
+Outputs:
+  WebsiteURL:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt WebCloudFront.DomainName
+
+  WebsiteBucketName:
+    Description: Name of S3 bucket to hold website content
+    Value: !Ref WebS3Bucket
+
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref WebCloudFront
+
+  CustomDomainURL:
+    Description: Custom domain URL (if configured)
+    Value: !If
+      - HasCustomDomain
+      - !Sub https://${DomainName}
+      - "Not configured"

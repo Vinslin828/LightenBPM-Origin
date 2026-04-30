@@ -1,0 +1,166 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'bpm-web
+
+  SAM for bpm-web
+
+  '
+Parameters:
+  DeploymentType:
+    AllowedValues:
+    - dev
+    - staging
+    - uat
+    - prod
+    Default: dev
+    Description: which stack to deploy, default is dev
+    Type: String
+  AWSCachingOptimized:
+    Description: AWS managed cache policy for CloudFront
+    Type: String
+    Default: 658327ea-f89d-4fab-a63d-7e88639e58f6
+  DomainName:
+    Description: DomainName for the CloudFront distribution
+    Type: String
+    Default: ''
+  ACMCertificate:
+    Description: ACM Certificate ARN for the CloudFront distribution
+    Type: String
+    Default: ''
+Conditions:
+  IsProduction:
+    Fn::Equals:
+    - Ref: DeploymentType
+    - prod
+  HasCustomDomain:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: DomainName
+      - ''
+Globals:
+  Function:
+    Timeout: 3
+Resources:
+  WebS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Sub: ${AWS::StackName}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+  WebS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: WebS3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: cloudfront.amazonaws.com
+          Action: s3:GetObject
+          Resource:
+            Fn::Sub: ${WebS3Bucket.Arn}/*
+          Condition:
+            StringEquals:
+              AWS:SourceArn:
+                Fn::Sub: arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebCloudFront}
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name:
+          Fn::Sub: ${AWS::StackName}-OAC
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  WebCloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+        - DomainName:
+            Fn::GetAtt:
+            - WebS3Bucket
+            - RegionalDomainName
+          Id: S3Origin
+          S3OriginConfig:
+            OriginAccessIdentity: ''
+          OriginAccessControlId:
+            Fn::GetAtt:
+            - CloudFrontOriginAccessControl
+            - Id
+        Enabled: true
+        HttpVersion: http2
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          AllowedMethods:
+          - GET
+          - HEAD
+          - OPTIONS
+          CachedMethods:
+          - GET
+          - HEAD
+          - OPTIONS
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId:
+            Fn::If:
+            - IsProduction
+            - Ref: AWSCachingOptimized
+            - 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+        PriceClass:
+          Fn::If:
+          - IsProduction
+          - PriceClass_All
+          - PriceClass_100
+        CustomErrorResponses:
+        - ErrorCode: 403
+          ResponseCode: 200
+          ResponsePagePath: /index.html
+        - ErrorCode: 404
+          ResponseCode: 200
+          ResponsePagePath: /index.html
+        Aliases:
+          Fn::If:
+          - HasCustomDomain
+          - - Ref: DomainName
+          - Ref: AWS::NoValue
+        ViewerCertificate:
+          Fn::If:
+          - HasCustomDomain
+          - AcmCertificateArn:
+              Ref: ACMCertificate
+            MinimumProtocolVersion: TLSv1.2_2021
+            SslSupportMethod: sni-only
+          - CloudFrontDefaultCertificate: true
+Outputs:
+  WebsiteURL:
+    Description: CloudFront Distribution Domain Name
+    Value:
+      Fn::GetAtt:
+      - WebCloudFront
+      - DomainName
+  WebsiteBucketName:
+    Description: Name of S3 bucket to hold website content
+    Value:
+      Ref: WebS3Bucket
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value:
+      Ref: WebCloudFront
+  CustomDomainURL:
+    Description: Custom domain URL (if configured)
+    Value:
+      Fn::If:
+      - HasCustomDomain
+      - Fn::Sub: https://${DomainName}
+      - Not configured

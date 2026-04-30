@@ -1,0 +1,15 @@
+/// <reference types="vite/client" />
+
+declare module "react-syntax-highlighter";
+declare module "react-syntax-highlighter/dist/esm/styles/prism";
+
+declare module '*.svg' {
+  const content: string
+  export default content
+}
+
+declare module '*.svg?react' {
+  import * as React from 'react'
+  const ReactComponent: React.FunctionComponent<React.SVGProps<SVGSVGElement>>
+  export default ReactComponent
+}

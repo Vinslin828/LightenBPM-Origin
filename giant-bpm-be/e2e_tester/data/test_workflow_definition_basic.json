@@ -1,0 +1,24 @@
+{
+    "nodes": [
+        {
+            "key": "form-node",
+            "next": "Approval-1764752337647",
+            "type": "start"
+        },
+        {
+            "key": "end-node",
+            "type": "end"
+        },
+        {
+            "key": "Approval-1764752337647",
+            "next": "end-node",
+            "type": "approval",
+            "approvers": {
+                "type": "applicant"
+            },
+            "description": "Applicant Self Approval",
+            "approval_method": "single"
+        }
+    ],
+    "version": 1
+}

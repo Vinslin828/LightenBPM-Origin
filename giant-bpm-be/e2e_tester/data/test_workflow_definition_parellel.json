@@ -1,0 +1,97 @@
+{
+  "nodes": [
+      {
+          "key": "form-node",
+          "next": "ParallelApproval-1765791746041",
+          "type": "start"
+      },
+      {
+          "key": "end-node",
+          "type": "end"
+      },
+      {
+          "key": "ParallelApproval-1765791746041",
+          "next": "ParallelApproval-1765792003855",
+          "type": "approval",
+          "approvers": [
+              {
+                  "type": "department_head",
+                  "config": {
+                      "source": "manual",
+                      "org_unit_id": 7
+                  },
+                  "description": "Specific department head"
+              },
+              {
+                  "type": "applicant_reporting_line",
+                  "config": {
+                      "method": "to_job_grade",
+                      "job_grade": 50
+                  },
+                  "description": "applicant's reporting line to gb 50"
+              },
+              {
+                  "type": "role",
+                  "config": {
+                      "role_id": 10
+                  },
+                  "description": "specific role-customer"
+              }
+          ],
+          "description": "Parallel AND",
+          "approval_logic": "AND",
+          "approval_method": "parallel"
+      },
+      {
+          "key": "ParallelApproval-1765792003855",
+          "next": "Approval-1765792151754",
+          "type": "approval",
+          "approvers": [
+              {
+                  "type": "specific_user_reporting_line",
+                  "config": {
+                      "level": 2,
+                      "method": "to_level",
+                      "source": "manual",
+                      "user_id": 8
+                  },
+                  "description": "specific user's reporting line-2L"
+              },
+              {
+                  "type": "role",
+                  "config": {
+                      "role_id": 9
+                  },
+                  "description": "specific role-virtual"
+              },
+              {
+                  "type": "specific_users",
+                  "config": {
+                      "user_ids": [
+                          1
+                      ]
+                  },
+                  "description": "specific user"
+              }
+          ],
+          "description": "Parallel OR",
+          "approval_logic": "OR",
+          "approval_method": "parallel"
+      },
+      {
+          "key": "Approval-1765792151754",
+          "next": "end-node",
+          "type": "approval",
+          "approvers": {
+              "type": "role",
+              "config": {
+                  "role_id": 10
+              }
+          },
+          "description": "Specific role 2-customer",
+          "approval_method": "single",
+          "reuse_prior_approvals": false
+      }
+  ],
+  "version": 1
+}

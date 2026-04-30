@@ -1,0 +1,15 @@
+export const TYPES = {
+  SettingsService: Symbol.for("SettingsService"),
+  CounterService: Symbol.for("CounterService"),
+  StorageService: Symbol.for("StorageService"),
+  ValidatorService: Symbol.for("ValidatorService"),
+  ValidationService: Symbol.for("ValidationSerivce"),
+  AuthService: Symbol.for("AuthService"),
+  LanguageService: Symbol.for("LanguageService"),
+  DomainService: Symbol.for("DomainService"),
+  FormService: Symbol.for("FormService"),
+  MasterDataService: Symbol.for("MasterDataService"),
+  WorkflowService: Symbol.for("WorkflowService"),
+  PermissionService: Symbol.for("PermissionService"),
+  ApplicationService: Symbol.for("ApplicationService"),
+} as const;
