@@ -1,0 +1,726 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: BPM Application Stack (works with shared-resources.yaml)
+
+Mappings:
+  StageToEnvironment:
+    dev:
+      Tag: dev
+    staging:
+      Tag: stag
+    uat:
+      Tag: sandbox
+    prod:
+      Tag: prod
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, uat, prod]
+    Description: Deployment stage
+
+  SharedInfraStackName:
+    Type: String
+    Default: bpm-shared
+    Description: Name of the shared infrastructure stack (for importing resources)
+
+  CustomDomainName:
+    Type: String
+    Description: Custom domain name for API Gateway (e.g., bpm.dev.lightencycling.com)
+
+  ServerImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag for server deployment
+
+  MigrationImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag for migration deployment
+
+  AppPort:
+    Type: Number
+    Default: 3000
+    Description: Application port
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-089a52c9fb373309c
+    Description: Existing VPC ID (new infrastructure)
+
+  SubnetPrivate:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-0ac04f7e4bc36c1e6
+    Description: Existing Private Subnet 1 ID (ap-1a)
+
+  SubnetPrivate2:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-0b71f9769521b2a94
+    Description: Existing Private Subnet 2 ID (ap-1c)
+
+  ListenerRulePriority:
+    Type: Number
+    Default: 100
+    Description: Priority for ALB Listener Rule (dev=100, staging=200, uat=300, prod=400)
+
+  CognitoUserPoolId:
+    Type: String
+    Default: ap-northeast-1_DewfBUwSH
+    Description: Cognito User Pool ID for JWT authentication
+
+  CognitoClientId:
+    Type: String
+    Default: 7nrf4jd201fudfit8kpi36dvll
+    Description: Cognito User Pool Client ID for JWT authentication
+
+  # Database configuration (managed by infra team)
+  DBEndpoint:
+    Type: String
+    Default: dev-share-db.cluster-cticeo60uppj.ap-northeast-1.rds.amazonaws.com
+    Description: Database endpoint (RDS cluster endpoint)
+
+  DatabaseName:
+    Type: String
+    Default: bpm_uat
+    Description: Database name
+
+  DatabaseUser:
+    Type: String
+    Default: bct-dev
+    Description: Database username
+    NoEcho: true
+
+  DatabasePassword:
+    Type: String
+    Default: Bct@Lighten-dev
+    Description: Database password
+    NoEcho: true
+
+  DatabaseSchema:
+    Type: String
+    Default: bpm_dev
+    AllowedValues: [bpm_dev, bpm_staging, bpm_uat, bpm_prod]
+    Description: PostgreSQL schema name
+
+  NotificationEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Enable SQS/Lambda notification system
+
+  SenderEmail:
+    Type: String
+    Default: noreply@uat.bpm.lightencycling.com
+    Description: SES verified sender email address
+
+  SmtpHost:
+    Type: String
+    Default: email-smtp.ap-northeast-1.amazonaws.com
+    Description: SES SMTP host
+
+  SmtpPort:
+    Type: String
+    Default: '587'
+    Description: SES SMTP port
+
+  SmtpUser:
+    Type: String
+    Default: ''
+    Description: SES SMTP username
+    NoEcho: true
+
+  SmtpPassword:
+    Type: String
+    Default: ''
+    Description: SES SMTP password
+    NoEcho: true
+
+  FrontendBaseUrl:
+    Type: String
+    Default: https://d1eyiey7sfco8o.cloudfront.net
+    Description: Frontend base URL for email links
+
+  PublicIdPrefix:
+    Type: String
+    Default: ""
+    Description: Prefix for generated public IDs (e.g., 'D' for Dev)
+
+  # IAM Roles (created by infra team, shared across environments)
+  ECSExecutionRoleArn:
+    Type: String
+    Description: ARN of the ECS Execution Role (created by infra team)
+
+  ECSTaskRoleArn:
+    Type: String
+    Description: ARN of the ECS Task Role (created by infra team)
+
+  AutoScalingRoleArn:
+    Type: String
+    Description: ARN of the Auto Scaling Role (created by infra team)
+
+  LambdaRoleArn:
+    Type: String
+    Description: ARN of the Lambda Execution Role (created by infra team)
+
+Resources:
+  # =============================================================================
+  # S3 BUCKET FOR ATTACHMENTS
+  # =============================================================================
+  AttachmentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-attachments"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - PUT
+              - GET
+            AllowedOrigins:
+              - "*"
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3600
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-attachment-bucket"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # =============================================================================
+  # CLOUDWATCH LOG GROUPS
+  # =============================================================================
+  APILogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AWS::StackName}-api"
+      RetentionInDays: 7
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-api-logs"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  MigrationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AWS::StackName}-migration"
+      RetentionInDays: 7
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-migration-logs"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  NotificationProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-notification-processor"
+      RetentionInDays: 7
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-notification-processor-logs"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # =============================================================================
+  # ALB TARGET GROUP & LISTENER RULE
+  # Using shared ALB from shared-resources.yaml
+  # =============================================================================
+  APITargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-api-tg"
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: !Ref AppPort
+      TargetType: ip
+      HealthCheckEnabled: true
+      HealthCheckPath: /healthy/status
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: 200
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-api-tg"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # Listener Rule on shared ALB
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn:
+        Fn::ImportValue: !Sub '${SharedInfraStackName}-ApplicationLoadBalancerListener'
+      Priority: !Ref ListenerRulePriority
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Ref CustomDomainName
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref APITargetGroup
+
+  # =============================================================================
+  # NOTIFICATION QUEUE (SQS)
+  # =============================================================================
+  NotificationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-notification-queue"
+      VisibilityTimeout: 300  # Lambda execution timeout (5 minutes)
+      MessageRetentionPeriod: 1209600  # 14 days
+      ReceiveMessageWaitTimeSeconds: 20  # Long polling
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt NotificationDLQ.Arn
+        maxReceiveCount: 3  # Move to DLQ after 3 failed attempts
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-notification-queue"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # Dead Letter Queue for failed notification messages
+  NotificationDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-notification-dlq"
+      MessageRetentionPeriod: 1209600  # 14 days
+      SqsManagedSseEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-notification-dlq"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # =============================================================================
+  # NOTIFICATION LAMBDA PROCESSOR
+  # =============================================================================
+  NotificationProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-notification-processor"
+      Runtime: nodejs20.x
+      Handler: index.handler
+      CodeUri: ../lambda/notification-processor
+      MemorySize: 256
+      Timeout: 300
+      Environment:
+        Variables:
+          SENDER_EMAIL: !Ref SenderEmail
+          SMTP_HOST: !Ref SmtpHost
+          SMTP_PORT: !Ref SmtpPort
+          SMTP_USER: !Ref SmtpUser
+          SMTP_PASSWORD: !Ref SmtpPassword
+          FRONTEND_BASE_URL: !Ref FrontendBaseUrl
+          STAGE: !Ref Stage
+      Role: !Ref LambdaRoleArn
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt NotificationQueue.Arn
+            BatchSize: 10
+      Tags:
+        Name: !Sub "${AWS::StackName}-notification-processor"
+        Project: "Business Process Management 2.0"
+        Department: "IT"
+        Environment: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # =============================================================================
+  # ECS CLUSTER
+  # =============================================================================
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${AWS::StackName}-cluster"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-cluster"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # =============================================================================
+  # ECS API TASK DEFINITION
+  # =============================================================================
+  APITaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${AWS::StackName}-api"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: 256
+      Memory: 512
+      ExecutionRoleArn: !Ref ECSExecutionRoleArn
+      TaskRoleArn: !Ref ECSTaskRoleArn
+      ContainerDefinitions:
+        - Name: !Sub "${AWS::StackName}-api-container"
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.ap-northeast-1.amazonaws.com/${SharedInfraStackName}/server:${ServerImageTag}"
+          Essential: true
+          PortMappings:
+            - ContainerPort: !Ref AppPort
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref APILogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Sub "${AWS::StackName}-api"
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - !Sub "curl -f http://localhost:${AppPort}/healthy/status || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 60
+          Environment:
+            - Name: PORT
+              Value: !Ref AppPort
+            - Name: DB_HOST
+              Value: !Ref DBEndpoint
+            - Name: DB_USER
+              Value: !Ref DatabaseUser
+            - Name: DB_PASSWORD
+              Value: !Ref DatabasePassword
+            - Name: DB_NAME
+              Value: !Ref DatabaseName
+            - Name: DB_SCHEMA
+              Value: !Ref DatabaseSchema
+            - Name: DB_PORT
+              Value: "5432"
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: AWS_SQS_NOTIFICATION_QUEUE_URL
+              Value: !Ref NotificationQueue
+            - Name: NOTIFICATION_ENABLED
+              Value: !Ref NotificationEnabled
+            - Name: PUBLIC_ID_PREFIX
+              Value: !Ref PublicIdPrefix
+            - Name: AWS_S3_ATTACHMENT_BUCKET
+              Value: !Sub "${AWS::StackName}-attachments"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-api-task"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # =============================================================================
+  # ECS MIGRATION TASK DEFINITION
+  # =============================================================================
+  MigrationTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${AWS::StackName}-migrate"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: 256
+      Memory: 512
+      ExecutionRoleArn: !Ref ECSExecutionRoleArn
+      TaskRoleArn: !Ref ECSTaskRoleArn
+      ContainerDefinitions:
+        - Name: !Sub "${AWS::StackName}-migration-container"
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.ap-northeast-1.amazonaws.com/${SharedInfraStackName}/migration:${MigrationImageTag}"
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref MigrationLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Sub "${AWS::StackName}-migration"
+          Environment:
+            - Name: DB_HOST
+              Value: !Ref DBEndpoint
+            - Name: DB_USER
+              Value: !Ref DatabaseUser
+            - Name: DB_PASSWORD
+              Value: !Ref DatabasePassword
+            - Name: DB_NAME
+              Value: !Ref DatabaseName
+            - Name: DB_SCHEMA
+              Value: !Ref DatabaseSchema
+            - Name: DB_PORT
+              Value: "5432"
+            - Name: PUBLIC_ID_PREFIX
+              Value: !Ref PublicIdPrefix
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-migration-task"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # =============================================================================
+  # ECS SERVICE
+  # Using shared ECS SecurityGroup from shared-resources.yaml
+  # =============================================================================
+  APIService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBListenerRule
+    Properties:
+      ServiceName: !Sub "${AWS::StackName}-service"
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref APITaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      EnableExecuteCommand: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - Fn::ImportValue: !Sub '${SharedInfraStackName}-ECSSecurityGroup'
+          Subnets:
+            - !Ref SubnetPrivate
+            - !Ref SubnetPrivate2
+      LoadBalancers:
+        - ContainerName: !Sub "${AWS::StackName}-api-container"
+          ContainerPort: !Ref AppPort
+          TargetGroupArn: !Ref APITargetGroup
+      HealthCheckGracePeriodSeconds: 60
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-service"
+        - Key: Project
+          Value: "Business Process Management 2.0"
+        - Key: Department
+          Value: "IT"
+        - Key: Environment
+          Value: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # =============================================================================
+  # AUTO SCALING FOR ECS SERVICE
+  # =============================================================================
+  ECSServiceScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 4
+      MinCapacity: 1
+      ResourceId: !Sub service/${ECSCluster}/${APIService.Name}
+      RoleARN: !Ref AutoScalingRoleArn
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  ECSServiceScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${Stage}-ecs-scale-cpu"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ECSServiceScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 65.0
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+
+  # =============================================================================
+  # API GATEWAY V2 (HTTP API)
+  # Using shared VPC Link from shared-resources.yaml
+  # =============================================================================
+  ApiGateway:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${AWS::StackName}-api-gateway"
+      Description: "HTTP API Gateway for BPM Backend API"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - "GET"
+          - "POST"
+          - "PUT"
+          - "DELETE"
+          - "PATCH"
+          - "OPTIONS"
+        AllowHeaders:
+          - "*"
+        MaxAge: 86400
+        AllowCredentials: false
+      Tags:
+        Name: !Sub "${AWS::StackName}-api-gateway"
+        Project: "Business Process Management 2.0"
+        Department: "IT"
+        Environment: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # JWT Authorizer for Cognito
+  ApiCognitoAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref ApiGateway
+      AuthorizerType: JWT
+      IdentitySource:
+        - $request.header.Authorization
+      JwtConfiguration:
+        Audience:
+          - !Ref CognitoClientId
+        Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPoolId}"
+      Name: !Sub "${Stage}-cognito-authorizer"
+
+  ApiGatewayRouteAPI:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: "ANY /{proxy+}"
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ApiCognitoAuthorizer
+      Target: !Sub "integrations/${ApiGatewayIntegration}"
+
+  ApiGatewayRouteOptions:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: "OPTIONS /{proxy+}"
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${ApiGatewayIntegration}"
+
+  ApiGatewayRouteDocsExact:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: "GET /openapi"
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${ApiGatewayIntegration}"
+
+  ApiGatewayRouteDocs:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: "GET /openapi/{proxy+}"
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${ApiGatewayIntegration}"
+
+  ApiGatewayRouteVersion:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: "GET /version"
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${ApiGatewayIntegration}"
+
+  # API Gateway Integration with Shared ALB
+  ApiGatewayIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      IntegrationUri:
+        Fn::ImportValue: !Sub '${SharedInfraStackName}-ApplicationLoadBalancerListener'
+      ConnectionType: VPC_LINK
+      ConnectionId:
+        Fn::ImportValue: !Sub '${SharedInfraStackName}-ApiGatewayVpcLink'
+      PayloadFormatVersion: '1.0'
+
+  ApiGatewayStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ApiGateway
+      StageName: $default
+      AutoDeploy: true
+      Tags:
+        Name: !Sub "${AWS::StackName}-api-stage"
+        Project: "Business Process Management 2.0"
+        Department: "IT"
+        Environment: !FindInMap [StageToEnvironment, !Ref Stage, Tag]
+
+  # API Mapping to Custom Domain (created by infra team)
+  ApiGatewayApiMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Properties:
+      ApiId: !Ref ApiGateway
+      DomainName: !Ref CustomDomainName
+      Stage: !Ref ApiGatewayStage
+
+Outputs:
+  Stage:
+    Description: Deployment stage
+    Value: !Ref Stage
+
+  TargetGroupArn:
+    Description: Target Group ARN for this environment
+    Value: !Ref APITargetGroup
+
+  ECSCluster:
+    Description: ECS Cluster name
+    Value: !Ref ECSCluster
+
+  ECSService:
+    Description: ECS Service name
+    Value: !Ref APIService
+
+  MigrationTaskDefinition:
+    Description: ECS Task Definition for database migration
+    Value: !Ref MigrationTaskDefinition
+
+  ApiGatewayURL:
+    Description: HTTP API Gateway endpoint URL (using $default stage, no stage in URL)
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com"
+
+  NotificationQueueURL:
+    Description: SQS Queue URL for notifications
+    Value: !Ref NotificationQueue
+
+  NotificationQueueArn:
+    Description: SQS Queue ARN for notifications
+    Value: !GetAtt NotificationQueue.Arn
+
+  NotificationDLQURL:
+    Description: Dead Letter Queue URL for failed notifications
+    Value: !Ref NotificationDLQ

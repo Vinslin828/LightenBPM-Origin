@@ -1,0 +1,92 @@
+# More information about the configuration file can be found here:
+# https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-config.html
+version = 0.1
+
+[default]
+[default.global.parameters]
+stack_name = "bpm-web"
+region = "ap-northeast-1"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+
+[default.package.parameters]
+resolve_s3 = true
+
+[default.sync.parameters]
+watch = true
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+
+[default.local_start_lambda.parameters]
+warm_containers = "EAGER"
+
+[dev.deploy.parameters]
+stack_name = "dev-bpm-web"
+resolve_s3 = true
+s3_prefix = "dev-bpm-web"
+region = "ap-northeast-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+    "DeploymentType=dev",
+    "AWSCachingOptimized=658327ea-f89d-4fab-a63d-7e88639e58f6",
+    "DomainName=bpm.dev.lightencycling.com",
+    "ACMCertificate=arn:aws:acm:us-east-1:519993345904:certificate/f9c37ebd-236d-4920-a82d-1d8b7aa2acd1"
+]
+image_repositories = []
+
+[staging.deploy.parameters]
+stack_name = "staging-bpm-web"
+resolve_s3 = true
+s3_prefix = "staging-bpm-web"
+region = "ap-northeast-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+    "DeploymentType=staging",
+    "AWSCachingOptimized=658327ea-f89d-4fab-a63d-7e88639e58f6",
+    "DomainName=bpm.staging.lightencycling.com",
+    "ACMCertificate=arn:aws:acm:us-east-1:519993345904:certificate/19e74f68-756e-4b0d-91b3-85003066e649"
+]
+image_repositories = []
+
+[uat.deploy.parameters]
+stack_name = "uat-bpm-web"
+resolve_s3 = true
+s3_prefix = "uat-bpm-web"
+region = "ap-northeast-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+    "DeploymentType=uat",
+    "AWSCachingOptimized=658327ea-f89d-4fab-a63d-7e88639e58f6",
+    "DomainName=bpm.uat.lightencycling.com",
+    "ACMCertificate=arn:aws:acm:us-east-1:519993345904:certificate/097d7163-fb73-4400-a7bb-0f030b4051a3"
+]
+image_repositories = []
+
+[prod.deploy.parameters]
+stack_name = "prod-bpm-web"
+resolve_s3 = true
+s3_prefix = "prod-bpm-web"
+region = "ap-northeast-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+    "DeploymentType=prod",
+    "AWSCachingOptimized=658327ea-f89d-4fab-a63d-7e88639e58f6",
+    "DomainName=bpm.lightencycling.com",
+    "ACMCertificate=arn:aws:acm:us-east-1:447555628229:certificate/90b19e95-390b-4bd0-a8bb-dce1c070072a"
+]
+image_repositories = []
