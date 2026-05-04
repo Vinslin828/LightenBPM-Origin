@@ -22,6 +22,7 @@ export const mockUsers: User[] = [
     defaultOrgId: "",
     defaultOrgCode: "",
     isAdmin: false,
+    lang: "en",
   },
   {
     id: "user-jane",
@@ -34,6 +35,7 @@ export const mockUsers: User[] = [
     defaultOrgId: "",
     defaultOrgCode: "",
     isAdmin: false,
+    lang: "en",
   },
   {
     id: "admin-user",
@@ -46,6 +48,7 @@ export const mockUsers: User[] = [
     defaultOrgId: "",
     defaultOrgCode: "",
     isAdmin: false,
+    lang: "en",
   },
   {
     id: "mock-gac-user",
@@ -58,6 +61,7 @@ export const mockUsers: User[] = [
     defaultOrgId: "",
     defaultOrgCode: "",
     isAdmin: false,
+    lang: "en",
   },
 ];
 export const mockTags: Tag[] = [
