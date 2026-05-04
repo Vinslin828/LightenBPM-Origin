@@ -83,4 +83,14 @@ export class MasterDataService implements IMasterDataService {
   }): Promise<ApiResponse<unknown>> {
     return this.domainService.testExternalApi(apiConfig);
   }
+
+  async callExternalApiProxy(config: {
+    url: string;
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    params?: Record<string, string>;
+    headers?: Record<string, string>;
+    body?: unknown;
+  }): Promise<unknown> {
+    return this.domainService.callExternalApiProxy(config);
+  }
 }

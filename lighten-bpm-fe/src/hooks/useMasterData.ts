@@ -11,7 +11,7 @@ import { Tag, User, FormSchema } from "@/types/domain";
 import { DatasetRecord } from "@/types/master-data-dataset";
 import { expressionMasterDataCacheAtom } from "@/store";
 import { useAtom } from "jotai";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SelectOption } from "@ui/select/single-select";
 import type { DropdownDynamicDatasource } from "@/components/ui/DataGrid/grid-data-grid.types";
 const getMasterDataService = () =>
@@ -387,6 +387,56 @@ export const useGridDynamicDropdownOptions = (
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dynamicHeaders, queries]);
+};
+
+export type CallExternalApiOptions = {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  params?: Record<string, string>;
+  headers?: Record<string, string>;
+  body?: unknown;
+};
+
+/**
+ * Returns a `callExternalApi(url, options?)` function that can be injected
+ * into expression bindings. The function is synchronous from the expression's
+ * perspective: it returns the cached result on repeated calls and triggers a
+ * background fetch the first time, causing a re-render when the data arrives.
+ */
+export const useCallExternalApi = () => {
+  const [cache, setCache] = useState<Map<string, unknown>>(new Map());
+  const pendingRef = useRef<Set<string>>(new Set());
+
+  const callExternalApi = useCallback(
+    (url: string, options?: CallExternalApiOptions): unknown => {
+      const cacheKey = JSON.stringify({ url, ...options });
+
+      if (cache.has(cacheKey)) {
+        return cache.get(cacheKey);
+      }
+
+      if (!pendingRef.current.has(cacheKey)) {
+        pendingRef.current.add(cacheKey);
+        getMasterDataService()
+          .callExternalApiProxy({ url, ...options })
+          .then((result) => {
+            pendingRef.current.delete(cacheKey);
+            setCache((prev) => {
+              const next = new Map(prev);
+              next.set(cacheKey, result);
+              return next;
+            });
+          })
+          .catch(() => {
+            pendingRef.current.delete(cacheKey);
+          });
+      }
+
+      return null;
+    },
+    [cache],
+  );
+
+  return callExternalApi;
 };
 
 export const usePreloadMasterDataForExpressions = (schema?: FormSchema) => {

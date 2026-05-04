@@ -308,6 +308,13 @@ export interface IDomainService {
     headers?: Record<string, string>;
     body?: string;
   }): Promise<ApiResponse<unknown>>;
+  callExternalApiProxy(config: {
+    url: string;
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    params?: Record<string, string>;
+    headers?: Record<string, string>;
+    body?: unknown;
+  }): Promise<unknown>;
   importDatasetCsv(
     code: string,
     file: File,
@@ -545,6 +552,13 @@ export interface IMasterDataService {
     headers?: Record<string, string>;
     body?: string;
   }): Promise<ApiResponse<unknown>>;
+  callExternalApiProxy(config: {
+    url: string;
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    params?: Record<string, string>;
+    headers?: Record<string, string>;
+    body?: unknown;
+  }): Promise<unknown>;
 }
 
 export interface ISettingsService {

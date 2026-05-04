@@ -14,6 +14,7 @@ import {
 } from '@nestjs/swagger';
 import { ScriptExecutionService } from './script-execution.service';
 import { FetchSnippetDto } from './dto/request/fetch-snippet.dto';
+import { CallExternalApiDto } from './dto/request/call-external-api.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import {
   BadRequestResponseDto,
@@ -67,5 +68,29 @@ export class ScriptExecutionController {
   })
   async executeFetch(@Body() dto: FetchSnippetDto): Promise<unknown> {
     return this.scriptExecutionService.executeFetch(dto.function);
+  }
+
+  @Post('call-external-api')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Call an external API through the server-side proxy',
+    description:
+      'Proxies an HTTP request to an external API through the secure server-side sandbox. ' +
+      'Useful for calling external APIs from expressions without CORS restrictions.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The external API responded successfully.',
+    schema: {
+      type: 'object',
+      description: 'The JSON response body from the external API.',
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Bad Request', type: BadRequestResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized', type: UnauthorizedResponseDto })
+  @ApiResponse({ status: 408, description: 'Request Timeout' })
+  @ApiResponse({ status: 500, description: 'Internal Server Error', type: InternalServerErrorResponseDto })
+  async callExternalApi(@Body() dto: CallExternalApiDto): Promise<unknown> {
+    return this.scriptExecutionService.callExternalApi(dto);
   }
 }

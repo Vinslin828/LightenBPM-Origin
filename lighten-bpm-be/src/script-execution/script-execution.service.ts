@@ -5,6 +5,7 @@ import {
   RequestTimeoutException,
 } from '@nestjs/common';
 import ivm from 'isolated-vm';
+import { CallExternalApiDto } from './dto/request/call-external-api.dto';
 
 export interface ScriptRunResult {
   success: boolean;
@@ -108,6 +109,48 @@ export class ScriptExecutionService {
         };
       };
     `);
+  }
+
+  /**
+   * Call an external API through the secure sandbox.
+   * Supports optional query params, headers and body.
+   */
+  async callExternalApi(config: CallExternalApiDto): Promise<unknown> {
+    const url = this.buildUrlWithParams(config.url, config.params);
+    const method = config.method ?? 'GET';
+
+    const optionsParts: string[] = [`method: '${method}'`];
+
+    if (config.headers && Object.keys(config.headers).length > 0) {
+      optionsParts.push(`headers: ${JSON.stringify(config.headers)}`);
+    }
+
+    if (config.body !== undefined && config.body !== null) {
+      const bodyStr =
+        typeof config.body === 'string'
+          ? config.body
+          : JSON.stringify(config.body);
+      optionsParts.push(`body: ${JSON.stringify(bodyStr)}`);
+    }
+
+    const script = `
+      const res = fetch(${JSON.stringify(url)}, { ${optionsParts.join(', ')} });
+      if (!res.ok) {
+        throw new Error('External API request failed: ' + res.status + ' ' + res.statusText);
+      }
+      return res.json();
+    `;
+
+    return this.executeFetch(script);
+  }
+
+  private buildUrlWithParams(
+    url: string,
+    params?: Record<string, string>,
+  ): string {
+    if (!params || Object.keys(params).length === 0) return url;
+    const qs = new URLSearchParams(params).toString();
+    return url.includes('?') ? `${url}&${qs}` : `${url}?${qs}`;
   }
 
   private handleExecutionError(error: unknown): never {

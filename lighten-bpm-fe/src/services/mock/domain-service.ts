@@ -1144,6 +1144,16 @@ export class MockDomainService implements IDomainService {
     };
   }
 
+  async callExternalApiProxy(_config: {
+    url: string;
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    params?: Record<string, string>;
+    headers?: Record<string, string>;
+    body?: unknown;
+  }): Promise<unknown> {
+    return null;
+  }
+
   async importDatasetCsv(
     _code: string,
     _file: File,

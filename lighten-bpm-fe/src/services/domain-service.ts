@@ -1931,6 +1931,17 @@ export class DomainService implements IDomainService {
     };
   }
 
+  async callExternalApiProxy(config: {
+    url: string;
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    params?: Record<string, string>;
+    headers?: Record<string, string>;
+    body?: unknown;
+  }): Promise<unknown> {
+    const result = await apiCaller.post("/execution/call-external-api", config);
+    return result.data;
+  }
+
   async importDatasetCsv(
     code: string,
     file: File,

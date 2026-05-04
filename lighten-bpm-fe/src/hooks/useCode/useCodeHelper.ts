@@ -20,7 +20,7 @@ import {
   getFieldNameByIdentifier as getFieldNameByIdentifierFromSchema,
   toNameKeyedFormData as toNameKeyedFormDataFromSchema,
 } from "./utils";
-import { MasterDataQuery, useOrgById, useUser } from "../useMasterData";
+import { MasterDataQuery, useCallExternalApi, useOrgById, useUser } from "../useMasterData";
 
 const DEFAULT_PAGE = 1;
 
@@ -265,6 +265,8 @@ export function useCodeHelper({
     [formSchema.entities],
   );
 
+  const callExternalApi = useCallExternalApi();
+
   const executeCodeWithExtra = useCallback(
     (
       code: string,
@@ -276,6 +278,7 @@ export function useCodeHelper({
         { name: "getApplication", value: getApplication },
         { name: "getCurrentNode", value: getCurrentNode },
         { name: "getMasterData", value: getMasterData },
+        { name: "callExternalApi", value: callExternalApi },
         ...extraBindings,
       ]);
     },
@@ -285,6 +288,7 @@ export function useCodeHelper({
       getApplication,
       getCurrentNode,
       getMasterData,
+      callExternalApi,
     ],
   );
 
@@ -297,6 +301,7 @@ export function useCodeHelper({
           { name: "getApplication", value: getApplication },
           { name: "getCurrentNode", value: getCurrentNode },
           { name: "getMasterData", value: getMasterData },
+          { name: "callExternalApi", value: callExternalApi },
         ]);
 
         //   console.debug({ formData, formSchema });
@@ -316,6 +321,7 @@ export function useCodeHelper({
       getCurrentNode,
       getFormField,
       getMasterData,
+      callExternalApi,
     ],
   );
 
