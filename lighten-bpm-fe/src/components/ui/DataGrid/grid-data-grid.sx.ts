@@ -129,4 +129,11 @@ export const gridSx = {
     padding: "8px 12px",
     borderBottom: "1px solid var(--grid-border)",
   },
+  "& .MuiDataGrid-cell.grid-cell-expression": {
+    backgroundColor: "var(--color-gray-2)",
+    cursor: "default",
+  },
+  "& .MuiDataGrid-row:hover .MuiDataGrid-cell.grid-cell-expression": {
+    backgroundColor: "var(--color-gray-2)",
+  },
 } as const;

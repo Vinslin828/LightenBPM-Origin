@@ -265,6 +265,29 @@ export function useCodeHelper({
     [formSchema.entities],
   );
 
+  const executeCodeWithExtra = useCallback(
+    (
+      code: string,
+      extraBindings: { name: string; value: unknown }[],
+    ): unknown => {
+      return executeCodeWithBindings(code, [
+        { name: "getFormField", value: getFormField },
+        { name: "getApplicantProfile", value: getApplicantProfile },
+        { name: "getApplication", value: getApplication },
+        { name: "getCurrentNode", value: getCurrentNode },
+        { name: "getMasterData", value: getMasterData },
+        ...extraBindings,
+      ]);
+    },
+    [
+      getFormField,
+      getApplicantProfile,
+      getApplication,
+      getCurrentNode,
+      getMasterData,
+    ],
+  );
+
   const executeCode = useCallback(
     (code: string): ((...args: unknown[]) => unknown) | unknown => {
       try {
@@ -526,5 +549,6 @@ export function useCodeHelper({
     getCompiledSchema,
     executeValidator,
     executeCode,
+    executeCodeWithExtra,
   };
 }

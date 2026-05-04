@@ -12,6 +12,8 @@ import { DatasetRecord } from "@/types/master-data-dataset";
 import { expressionMasterDataCacheAtom } from "@/store";
 import { useAtom } from "jotai";
 import { useEffect, useMemo } from "react";
+import type { SelectOption } from "@ui/select/single-select";
+import type { DropdownDynamicDatasource } from "@/components/ui/DataGrid/grid-data-grid.types";
 const getMasterDataService = () =>
   container.get<IMasterDataService>(TYPES.MasterDataService);
 
@@ -314,6 +316,77 @@ export const useTestExternalApi = () => {
       body?: string;
     }) => getMasterDataService().testExternalApi(apiConfig),
   });
+};
+
+type GridHeaderForDynamicDropdown = {
+  keyValue: string;
+  type: string;
+  datasource?: unknown;
+};
+
+export const useGridDynamicDropdownOptions = (
+  headers: GridHeaderForDynamicDropdown[],
+): Record<string, SelectOption<string>[]> => {
+  const dynamicHeaders = useMemo(
+    () =>
+      headers.filter((h) => {
+        const ds = h.datasource as DropdownDynamicDatasource | undefined;
+        return (
+          h.type === "dropdown" &&
+          ds?.type === "dynamic" &&
+          Boolean(ds?.table?.tableKey) &&
+          Boolean(ds?.table?.labelKey) &&
+          Boolean(ds?.table?.valueKey)
+        );
+      }),
+    [headers],
+  );
+
+  const queries = useQueries({
+    queries: dynamicHeaders.map((header) => {
+      const ds = header.datasource as DropdownDynamicDatasource;
+      const tableKey = ds.table!.tableKey!;
+      const params = {
+        limit: 1000,
+        sortBy: ds.sorter?.columnKey,
+        sortOrder: ds.sorter?.order,
+      };
+      return {
+        queryKey: QUERY_KEYS.bpmDatasetRecords(tableKey, params),
+        queryFn: () =>
+          getMasterDataService().getBpmDatasetRecords(tableKey, params),
+        enabled: true,
+      };
+    }),
+  });
+
+  return useMemo(() => {
+    return dynamicHeaders.reduce(
+      (acc, header, index) => {
+        const items: Record<string, unknown>[] =
+          (queries[index]?.data?.data?.items as Record<string, unknown>[]) ??
+          [];
+        const ds = header.datasource as DropdownDynamicDatasource;
+        const { labelKey, valueKey } = ds.table!;
+        const seen = new Set<string>();
+        const options: SelectOption<string>[] = [];
+        items.forEach((row) => {
+          const value = String(row[valueKey!] ?? "").trim();
+          if (!value || seen.has(value)) return;
+          seen.add(value);
+          options.push({
+            label: String(row[labelKey!] ?? ""),
+            value,
+            key: value,
+          });
+        });
+        acc[header.keyValue] = options;
+        return acc;
+      },
+      {} as Record<string, SelectOption<string>[]>,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dynamicHeaders, queries]);
 };
 
 export const usePreloadMasterDataForExpressions = (schema?: FormSchema) => {

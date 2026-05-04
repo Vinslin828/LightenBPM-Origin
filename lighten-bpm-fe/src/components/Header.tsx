@@ -11,7 +11,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { BellIcon, Logo } from "@/components/icons/index";
+import { BellIcon } from "@/components/icons/index";
+import LimoLogo from "@/assets/LIMOLOGO.svg";
 import { Avatar } from "@ui/avatar";
 
 interface HeaderProps {
@@ -42,7 +43,7 @@ export const Header = ({ className }: HeaderProps) => {
         {/* App title/breadcrumb could go here */}
         <div className="flex items-center">
           <Link to="/dashboard">
-            <Logo className="h-8 text-white" />
+            <img src={LimoLogo} alt="Logo" className="h-16 w-auto brightness-0 invert" />
           </Link>
         </div>
       </div>

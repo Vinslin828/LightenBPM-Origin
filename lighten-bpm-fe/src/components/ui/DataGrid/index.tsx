@@ -29,6 +29,8 @@ type Props = {
   headers: GridHeaderItem[];
   maxRows?: number;
   readonly?: boolean;
+  evaluateExpression?: (code: string, row: Record<string, unknown>) => unknown;
+  resolvedDynamicOptions?: Record<string, import("@ui/select/single-select").SelectOption<string>[]>;
 };
 
 export function DataGrid({
@@ -37,11 +39,16 @@ export function DataGrid({
   headers,
   maxRows,
   readonly = false,
+  evaluateExpression,
+  resolvedDynamicOptions,
 }: Props) {
   const headerSignature = React.useMemo(
     () =>
       headers
-        .map((h) => `${h.key}:${h.keyValue}:${h.type}:${h.label}`)
+        .map(
+          (h) =>
+            `${h.key}:${h.keyValue}:${h.type}:${h.label}:${h.expression ?? ""}`,
+        )
         .join("|"),
     [headers],
   );
@@ -90,7 +97,7 @@ export function DataGrid({
   );
 
   const columns = React.useMemo(() => {
-    const baseColumns = createGridColumns(stableHeaders, isReadOnly).map(
+    const baseColumns = createGridColumns(stableHeaders, isReadOnly, evaluateExpression, resolvedDynamicOptions).map(
       (column) => {
         const resizedWidth = columnWidths[column.field];
         if (!resizedWidth) return column;
@@ -163,7 +170,7 @@ export function DataGrid({
     };
 
     return [...baseColumns, actionsColumn];
-  }, [columnWidths, emitRows, isReadOnly, onChange, stableHeaders]);
+  }, [columnWidths, emitRows, evaluateExpression, isReadOnly, onChange, resolvedDynamicOptions, stableHeaders]);
 
   const handleColumnWidthChange = React.useCallback(
     (params: GridColumnResizeParams) => {
@@ -189,6 +196,9 @@ export function DataGrid({
       let changed = false;
 
       stableHeaders.forEach((header) => {
+        // Expression columns are computed at render time, not stored in row data
+        if (header.type === "expression") return;
+
         const primaryField = getHeaderField(header);
         const legacyField = header.key?.trim();
 

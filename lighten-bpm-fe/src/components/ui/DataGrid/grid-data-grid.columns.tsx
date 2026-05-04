@@ -87,15 +87,62 @@ const getGridDateOperatorsBySubtype = (
 export const createGridColumns = (
   headers: GridHeaderItem[],
   readonly = false,
+  evaluateExpression?: (
+    code: string,
+    row: Record<string, unknown>,
+  ) => unknown,
+  resolvedDynamicOptions?: Record<string, import("@ui/select/single-select").SelectOption<string>[]>,
 ): GridColDef[] =>
   headers.map((header) => {
     const fieldKey = getHeaderField(header);
-    const dropdownOptions = getDropdownOptions(header);
+    const staticDropdownOptions = getDropdownOptions(header);
+    const dropdownOptions =
+      resolvedDynamicOptions?.[header.keyValue] ?? staticDropdownOptions;
     const isTimeOnlyColumn =
       header.type === "date" && header.subtype === "time";
 
     const getRawValue = (row: GridRowModel) =>
       (row as Record<string, unknown>)[fieldKey];
+
+    // Expression columns are read-only and compute their value dynamically
+    if (header.type === "expression") {
+      const expressionCode = header.expression ?? "";
+
+      const computeValue = (row: GridRowModel): unknown => {
+        if (!expressionCode || !evaluateExpression) return "";
+        try {
+          return evaluateExpression(expressionCode, row as Record<string, unknown>) ?? "";
+        } catch {
+          return "";
+        }
+      };
+
+      return {
+        field: fieldKey,
+        headerName: header.label,
+        type: "string" as GridColDef["type"],
+        width: 180,
+        editable: false,
+        resizable: true,
+        hideable: false,
+        minWidth: 140,
+        filterable: false,
+        sortable: false,
+        align: "left" as GridColDef["align"],
+        headerAlign: "left" as GridColDef["headerAlign"],
+        cellClassName: () => "grid-cell-expression",
+        valueGetter: (_value, row) => {
+          const result = computeValue(row as GridRowModel);
+          return result === undefined || result === null ? "" : String(result);
+        },
+        renderCell: (params: GridRenderCellParams) => {
+          const result = computeValue(params.row as GridRowModel);
+          const display =
+            result === undefined || result === null ? "" : String(result);
+          return <span className="font-regular text-sm">{display}</span>;
+        },
+      } satisfies GridColDef;
+    }
 
     const toNumberOrNull = (value: unknown) => {
       if (value === undefined || value === null || value === "") return null;

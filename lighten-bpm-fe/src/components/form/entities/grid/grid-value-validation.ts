@@ -2,7 +2,7 @@ export type GridValidationHeaderItem = {
   label: string;
   key: string;
   keyValue: string;
-  type: "input" | "number" | "date" | "dropdown";
+  type: "input" | "number" | "date" | "dropdown" | "expression";
   required?: boolean;
 };
 

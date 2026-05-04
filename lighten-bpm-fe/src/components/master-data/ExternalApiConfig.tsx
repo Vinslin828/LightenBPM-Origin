@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Play, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTestExternalApi } from "@/hooks/useMasterData";
@@ -83,7 +83,7 @@ type CodePanelProps = {
   className?: string;
 };
 
-function CodePanel({
+const CodePanel = memo(function CodePanel({
   value,
   onChange,
   minLines = 12,
@@ -142,7 +142,7 @@ function CodePanel({
       />
     </div>
   );
-}
+});
 
 function stringifyApiConfig(apiConfig: ExternalApiRequestConfig) {
   return JSON.stringify(apiConfig, null, 2);
@@ -160,6 +160,34 @@ const formatApiConfigForEditor = (apiConfig: ExternalApiRequestConfig) =>
     ? DEFAULT_API_CONFIG_COMMENTED
     : stringifyApiConfig(apiConfig);
 
+/**
+ * Truncates arrays to a small preview to prevent the browser from freezing
+ * when a large API response (e.g. 50 000 records) is stringified and rendered.
+ * The user only needs to see the data structure for field-mapping purposes.
+ */
+const MAX_ARRAY_PREVIEW = 5;
+function previewData(data: unknown, depth = 0): unknown {
+  if (depth > 15) return data;
+  if (Array.isArray(data)) {
+    const slice = data
+      .slice(0, MAX_ARRAY_PREVIEW)
+      .map((item) => previewData(item, depth + 1));
+    if (data.length > MAX_ARRAY_PREVIEW) {
+      slice.push(`… ${data.length - MAX_ARRAY_PREVIEW} more items (truncated for display)`);
+    }
+    return slice;
+  }
+  if (data !== null && typeof data === "object") {
+    return Object.fromEntries(
+      Object.entries(data as Record<string, unknown>).map(([k, v]) => [
+        k,
+        previewData(v, depth + 1),
+      ]),
+    );
+  }
+  return data;
+}
+
 const parseApiConfig = (value: string): ExternalApiRequestConfig => {
   const parsed = JSON.parse(value) as ExternalApiRequestConfig;
   const method = parsed.method ?? "GET";
@@ -170,6 +198,52 @@ const parseApiConfig = (value: string): ExternalApiRequestConfig => {
     body: parsed.body ?? undefined,
   };
 };
+
+type MappingRowProps = {
+  mapping: ExternalApiFieldMapping;
+  onUpdate: (
+    id: string,
+    field: keyof Omit<ExternalApiFieldMapping, "id">,
+    value: string,
+  ) => void;
+  onRemove: (id: string) => void;
+};
+
+const MappingRow = memo(function MappingRow({
+  mapping,
+  onUpdate,
+  onRemove,
+}: MappingRowProps) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)_44px] items-center gap-2.5">
+      <Input
+        value={mapping.field_name}
+        onChange={(event) =>
+          onUpdate(mapping.id, "field_name", event.target.value)
+        }
+        placeholder="column_name"
+      />
+      <ArrowRight className="h-4 w-4 justify-self-center text-secondary-text" />
+      <Input
+        value={mapping.json_path}
+        onChange={(event) =>
+          onUpdate(mapping.id, "json_path", event.target.value)
+        }
+        placeholder="response_path"
+      />
+      <Button
+        type="button"
+        variant="icon"
+        size="icon"
+        className="h-11 w-11"
+        onClick={() => onRemove(mapping.id)}
+        aria-label="Remove mapping"
+      >
+        <TrashIcon className="h-6 w-6 text-primary-text" />
+      </Button>
+    </div>
+  );
+});
 
 export const ExternalApiConfig = ({
   tableName,
@@ -188,58 +262,72 @@ export const ExternalApiConfig = ({
   );
   const [testResponse, setTestResponse] = useState("");
   const [apiConfigError, setApiConfigError] = useState("");
-  const [editMode, setEditMode] = useState(isEditMode);
   const testExternalApi = useTestExternalApi();
+
+  // Stable refs so callbacks below never need to be recreated
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     setApiConfigText(formatApiConfigForEditor(value.api_config));
   }, [value.api_config]);
 
-  const updateValue = (updates: Partial<ExternalApiConfigValue>) => {
-    onChange({ ...value, ...updates });
-  };
+  const updateValue = useCallback((updates: Partial<ExternalApiConfigValue>) => {
+    onChangeRef.current({ ...valueRef.current, ...updates });
+  }, []);
 
-  const updateMapping = (
-    mappingId: string,
-    field: keyof Omit<ExternalApiFieldMapping, "id">,
-    nextValue: string,
-  ) => {
-    updateValue({
+  const updateMapping = useCallback(
+    (
+      mappingId: string,
+      field: keyof Omit<ExternalApiFieldMapping, "id">,
+      nextValue: string,
+    ) => {
+      const current = valueRef.current;
+      onChangeRef.current({
+        ...current,
+        field_mappings: {
+          ...current.field_mappings,
+          mappings: current.field_mappings.mappings.map((mapping) =>
+            mapping.id === mappingId
+              ? { ...mapping, [field]: nextValue }
+              : mapping,
+          ),
+        },
+      });
+    },
+    [],
+  );
+
+  const addMapping = useCallback(() => {
+    const current = valueRef.current;
+    onChangeRef.current({
+      ...current,
       field_mappings: {
-        ...value.field_mappings,
-        mappings: value.field_mappings.mappings.map((mapping) =>
-          mapping.id === mappingId
-            ? { ...mapping, [field]: nextValue }
-            : mapping,
-        ),
+        ...current.field_mappings,
+        mappings: [...current.field_mappings.mappings, createMapping()],
       },
     });
-  };
+  }, []);
 
-  const addMapping = () => {
-    updateValue({
+  const removeMapping = useCallback((mappingId: string) => {
+    const current = valueRef.current;
+    onChangeRef.current({
+      ...current,
       field_mappings: {
-        ...value.field_mappings,
-        mappings: [...value.field_mappings.mappings, createMapping()],
-      },
-    });
-  };
-
-  const removeMapping = (mappingId: string) => {
-    updateValue({
-      field_mappings: {
-        ...value.field_mappings,
+        ...current.field_mappings,
         mappings:
-          value.field_mappings.mappings.length === 1
+          current.field_mappings.mappings.length === 1
             ? [createMapping()]
-            : value.field_mappings.mappings.filter(
+            : current.field_mappings.mappings.filter(
                 (mapping) => mapping.id !== mappingId,
               ),
       },
     });
-  };
+  }, []);
 
-  const handleApiConfigChange = (nextValue: string) => {
+  const handleApiConfigChange = useCallback((nextValue: string) => {
     setApiConfigText(nextValue);
 
     const meaningfulValue = stripCommentLines(nextValue);
@@ -256,27 +344,39 @@ export const ExternalApiConfig = ({
     } catch {
       setApiConfigError("API config must be valid JSON.");
     }
-  };
+  }, [updateValue]);
 
-  const handleRunTest = async () => {
+  const handleRunTest = useCallback(async () => {
     try {
-      const response = await testExternalApi.mutateAsync(value.api_config);
-      setTestResponse(JSON.stringify(response.data ?? null, null, 2));
+      const response = await testExternalApi.mutateAsync(valueRef.current.api_config);
+      // Truncate large arrays to a small preview before stringifying.
+      // A 50 000-record response stringifies to ~500 000 lines, which
+      // freezes the browser when CodePanel tries to render that many divs.
+      const preview = previewData(response.data ?? null);
+      setTestResponse(JSON.stringify(preview, null, 2));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to test external API.";
       setTestResponse(JSON.stringify({ error: message }, null, 2));
     }
-  };
+  }, [testExternalApi]);
 
-  const isCreateDisabled =
-    !tableName.trim() ||
-    !value.api_config.url.trim() ||
-    !!apiConfigError ||
-    value.field_mappings.mappings.some(
-      (mapping) => !mapping.field_name.trim() || !mapping.json_path.trim(),
-    );
-  const hasApiResponse = Boolean(testResponse.trim());
+  const isCreateDisabled = useMemo(
+    () =>
+      !tableName.trim() ||
+      !value.api_config.url.trim() ||
+      !!apiConfigError ||
+      value.field_mappings.mappings.some(
+        (mapping) => !mapping.field_name.trim() || !mapping.json_path.trim(),
+      ),
+    [tableName, value.api_config.url, apiConfigError, value.field_mappings.mappings],
+  );
+
+  // Avoid calling .trim() on a potentially large response string on every render
+  const hasApiResponse = useMemo(
+    () => testResponse.length > 0 && testResponse.trimStart().length > 0,
+    [testResponse],
+  );
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-7 overflow-hidden bg-white p-7">
@@ -381,49 +481,12 @@ export const ExternalApiConfig = ({
 
               <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
                 {value.field_mappings.mappings.map((mapping) => (
-                  <div
+                  <MappingRow
                     key={mapping.id}
-                    className="grid grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)_44px] items-center gap-2.5"
-                  >
-                    <Input
-                      value={mapping.field_name}
-                      // disabled={isEditMode && !mapping.isNew}
-                      onChange={(event) =>
-                        updateMapping(
-                          mapping.id,
-                          "field_name",
-                          event.target.value,
-                        )
-                      }
-                      placeholder="column_name"
-                    />
-                    <ArrowRight className="h-4 w-4 justify-self-center text-secondary-text" />
-                    <Input
-                      value={mapping.json_path}
-                      onChange={(event) =>
-                        updateMapping(
-                          mapping.id,
-                          "json_path",
-                          event.target.value,
-                        )
-                      }
-                      // disabled={isEditMode && !mapping.isNew}
-                      placeholder="response_path"
-                    />
-
-                    {
-                      <Button
-                        type="button"
-                        variant="icon"
-                        size="icon"
-                        className="h-11 w-11"
-                        onClick={() => removeMapping(mapping.id)}
-                        aria-label="Remove mapping"
-                      >
-                        <TrashIcon className="h-6 w-6 text-primary-text" />
-                      </Button>
-                    }
-                  </div>
+                    mapping={mapping}
+                    onUpdate={updateMapping}
+                    onRemove={removeMapping}
+                  />
                 ))}
                 {hasApiResponse && (
                   <Button

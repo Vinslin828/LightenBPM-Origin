@@ -149,11 +149,20 @@ const dropdownSchema = baseHeaderSchema.extend({
   datasource: datasourceSchema.optional(),
 });
 
+const expressionSchema = baseHeaderSchema.extend({
+  type: z.literal("expression"),
+  expression: z.string().optional(),
+  // kept for union compatibility; not shown in UI
+  placeholder: z.string().optional(),
+  required: z.boolean().optional().default(false),
+});
+
 const gridHeaderItemSchema = z.discriminatedUnion("type", [
   inputSchema,
   numberSchema,
   dateSchema,
   dropdownSchema,
+  expressionSchema,
 ]);
 
 const gridHeaderArraySchema = z
@@ -224,7 +233,9 @@ export const gridHeaderAttribute = createAttribute({
         const rawKeyValue = record.keyValue;
         const type =
           typeof record.type === "string" &&
-          ["input", "number", "date", "dropdown"].includes(record.type)
+          ["input", "number", "date", "dropdown", "expression"].includes(
+            record.type,
+          )
             ? record.type
             : "input";
 
@@ -265,6 +276,12 @@ export const gridHeaderAttribute = createAttribute({
             typeof record.datasource === "object" &&
             "type" in record.datasource
               ? record.datasource
+              : undefined,
+          expression:
+            type === "expression"
+              ? typeof record.expression === "string"
+                ? record.expression
+                : "function expression() {\n  return undefined;\n}"
               : undefined,
         };
       });

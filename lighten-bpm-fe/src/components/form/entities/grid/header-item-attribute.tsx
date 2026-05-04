@@ -4,7 +4,9 @@ import {
   NumberIcon,
   DateTimeIcon,
   DropdownIcon,
+  ExpressionIcon,
 } from "@/components/icons";
+import CodeEditButton from "@ui/button/code-edit-button";
 import { builderStoreAtom, selectedGridHeaderAtom } from "@/store";
 import { cn } from "@/utils/cn";
 import { AttributeComponentProps } from "@coltorapps/builder-react";
@@ -26,6 +28,7 @@ import { useAtom } from "jotai";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { gridHeaderAttribute } from "../../attributes/grid-header/definition";
 import { ZodError } from "zod";
+import { useBpmDatasets } from "@/hooks/useMasterData";
 
 type GridHeadersValue = AttributeComponentProps<
   typeof gridHeaderAttribute
@@ -43,6 +46,18 @@ type StaticDatasource = {
     isReference: boolean;
     value?: string;
     reference?: string;
+  };
+};
+type DynamicDatasource = {
+  type: "dynamic";
+  table?: {
+    tableKey: string | null;
+    labelKey: string | null;
+    valueKey: string | null;
+  };
+  sorter?: {
+    columnKey?: string;
+    order?: "asc" | "desc";
   };
 };
 
@@ -108,6 +123,35 @@ const normalizeStaticDatasource = (
   };
 };
 
+const getDropdownDatasourceMode = (datasource: unknown): "static" | "dynamic" => {
+  if (
+    datasource &&
+    typeof datasource === "object" &&
+    "type" in datasource &&
+    (datasource as { type?: string }).type === "dynamic"
+  ) {
+    return "dynamic";
+  }
+  return "static";
+};
+
+const normalizeDynamicDatasource = (datasource: unknown): DynamicDatasource => {
+  if (
+    datasource &&
+    typeof datasource === "object" &&
+    "type" in datasource &&
+    (datasource as { type?: string }).type === "dynamic"
+  ) {
+    const d = datasource as Partial<DynamicDatasource>;
+    return {
+      type: "dynamic",
+      table: d.table,
+      sorter: d.sorter,
+    };
+  }
+  return { type: "dynamic" };
+};
+
 export default function HeaderItemAttribute({
   entityId,
   headerKey,
@@ -121,6 +165,8 @@ export default function HeaderItemAttribute({
   const [expandedOptionIndexes, setExpandedOptionIndexes] = useState<number[]>(
     [],
   );
+
+  const { datasets: allTables, isLoading: isLoadingTables } = useBpmDatasets();
 
   useEffect(() => {
     if (!builderStore) return;
@@ -237,6 +283,11 @@ export default function HeaderItemAttribute({
       label: "Dropdown",
       icon: <DropdownIcon className="text-primary-text" />,
     },
+    {
+      value: "expression",
+      label: "Expression",
+      icon: <ExpressionIcon className="text-primary-text" />,
+    },
   ];
   const dateSubtypeOptions: SelectOption<string>[] = [
     { label: "Date", value: "date", key: "date" },
@@ -253,13 +304,18 @@ export default function HeaderItemAttribute({
     { value: "others", label: "Others" },
   ];
   const currentType = header.type ?? "input";
-  const showDefaultValue = currentType !== "dropdown";
+  const showDefaultValue =
+    currentType !== "dropdown" && currentType !== "expression";
+  const showPlaceholder = currentType !== "expression";
+  const showRequired = currentType !== "expression";
+
+  const rawDatasource = (header as GridHeaderItem & { datasource?: unknown }).datasource;
+  const datasourceMode =
+    currentType === "dropdown" ? getDropdownDatasourceMode(rawDatasource) : "static";
+
   const staticDatasource =
-    currentType === "dropdown"
-      ? normalizeStaticDatasource(
-          (header as GridHeaderItem & { datasource?: unknown }).datasource,
-          header.keyValue,
-        )
+    currentType === "dropdown" && datasourceMode === "static"
+      ? normalizeStaticDatasource(rawDatasource, header.keyValue)
       : undefined;
   const staticOptions = staticDatasource?.options ?? [];
   const defaultDropdownValue =
@@ -272,6 +328,43 @@ export default function HeaderItemAttribute({
     { label: "None", value: "__none__", key: "none" },
     ...staticOptions,
   ];
+
+  const dynamicDatasource =
+    currentType === "dropdown" && datasourceMode === "dynamic"
+      ? normalizeDynamicDatasource(rawDatasource)
+      : undefined;
+
+  const tableOptions: SelectOption<string>[] = useMemo(
+    () =>
+      allTables.map((table) => ({
+        label: table.name,
+        value: table.code,
+        key: table.code,
+      })),
+    [allTables],
+  );
+
+  const validTableKey = useMemo(() => {
+    if (!dynamicDatasource?.table?.tableKey) return undefined;
+    return tableOptions.find((o) => o.value === dynamicDatasource.table!.tableKey)?.value;
+  }, [dynamicDatasource, tableOptions]);
+
+  const columnOptions: SelectOption<string>[] = useMemo(() => {
+    if (!dynamicDatasource?.table?.tableKey) return [];
+    const fields = allTables.find((t) => t.code === dynamicDatasource.table!.tableKey)?.fields;
+    return fields?.map((f) => ({ label: f.name, value: f.name, key: f.name })) ?? [];
+  }, [allTables, dynamicDatasource]);
+
+  const updateDynamicDatasource = (patch: Partial<DynamicDatasource>) => {
+    const current = dynamicDatasource ?? { type: "dynamic" as const };
+    updateHeader({
+      datasource: { ...current, ...patch } as GridHeaderItem extends {
+        datasource?: infer T;
+      }
+        ? T
+        : never,
+    } as Partial<GridHeaderItem>);
+  };
 
   const updateStaticDatasource = (
     updater: (current: StaticDatasource) => StaticDatasource,
@@ -388,6 +481,12 @@ export default function HeaderItemAttribute({
                                   ),
                                 }
                               : {}),
+                            ...(nextType === "expression"
+                              ? {
+                                  expression:
+                                    "function expression() {\n  return undefined;\n}",
+                                }
+                              : {}),
                           } as GridHeaderItem;
 
                           replaceHeader(nextHeader);
@@ -407,16 +506,18 @@ export default function HeaderItemAttribute({
                     );
                   })}
                 </div>
-                <div>
-                  <Label>Placeholder</Label>
-                  <Input
-                    value={header.placeholder ?? ""}
-                    placeholder="Placeholder"
-                    onChange={(e) =>
-                      updateHeader({ placeholder: e.target.value })
-                    }
-                  />
-                </div>
+                {showPlaceholder && (
+                  <div>
+                    <Label>Placeholder</Label>
+                    <Input
+                      value={header.placeholder ?? ""}
+                      placeholder="Placeholder"
+                      onChange={(e) =>
+                        updateHeader({ placeholder: e.target.value })
+                      }
+                    />
+                  </div>
+                )}
                 {currentType === "date" && (
                   <div className="flex flex-col gap-2">
                     <Label>Date Subtype</Label>
@@ -509,197 +610,425 @@ export default function HeaderItemAttribute({
                 )}
                 {currentType === "dropdown" && (
                   <>
-                    <div className="space-y-2">
-                      <div className="flex flex-row justify-between items-center">
-                        <Label>Options</Label>
-                        <div className="flex items-center gap-2">
-                          <div className="text-xs text-white bg-lighten-blue rounded-full w-5 h-5 flex items-center justify-center">
-                            {staticOptions.length}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            className="p-0 cursor-pointer"
+                    {/* Datasource mode toggle */}
+                    <div className="flex flex-col gap-2">
+                      <Label>Datasource</Label>
+                      <div className="flex gap-2">
+                        {(["static", "dynamic"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
                             onClick={() => {
+                              if (datasourceMode === mode) return;
+                              if (mode === "static") {
+                                updateHeader({
+                                  datasource: normalizeStaticDatasource(
+                                    undefined,
+                                    header.keyValue,
+                                  ) as GridHeaderItem extends {
+                                    datasource?: infer T;
+                                  }
+                                    ? T
+                                    : never,
+                                } as Partial<GridHeaderItem>);
+                              } else {
+                                updateHeader({
+                                  datasource: {
+                                    type: "dynamic",
+                                  } as GridHeaderItem extends {
+                                    datasource?: infer T;
+                                  }
+                                    ? T
+                                    : never,
+                                } as Partial<GridHeaderItem>);
+                              }
+                            }}
+                            className={cn(
+                              "flex-1 py-2 rounded-md border text-sm font-medium capitalize",
+                              datasourceMode === mode
+                                ? "border-2 border-lighten-blue bg-lighten-blue/10 text-lighten-blue"
+                                : "border-stroke bg-white text-dark",
+                            )}
+                          >
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {datasourceMode === "static" && (
+                      <>
+                        <div className="space-y-2">
+                          <div className="flex flex-row justify-between items-center">
+                            <Label>Options</Label>
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs text-white bg-lighten-blue rounded-full w-5 h-5 flex items-center justify-center">
+                                {staticOptions.length}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                className="p-0 cursor-pointer"
+                                onClick={() => {
+                                  updateStaticDatasource((current) => ({
+                                    ...current,
+                                    options: [
+                                      ...current.options,
+                                      createStaticOption(
+                                        current.options.length,
+                                        header.keyValue,
+                                      ),
+                                    ],
+                                  }));
+                                }}
+                              >
+                                <PlusIcon className="text-lighten-blue" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          <SortableList
+                            items={staticOptions.map((option) => ({
+                              id: option.key,
+                            }))}
+                            onDragEnd={handleDropdownOptionsDragEnd}
+                          >
+                            {staticOptions.map((option, index) => (
+                              <SortableItem
+                                key={option.key}
+                                id={option.key}
+                                expanded={expandedOptionIndexes.includes(index)}
+                                onExpand={() => {
+                                  setExpandedOptionIndexes((prev) =>
+                                    prev.includes(index)
+                                      ? prev.filter((i) => i !== index)
+                                      : [...prev, index],
+                                  );
+                                }}
+                                onRemove={() => {
+                                  if (staticOptions.length <= 1) return;
+
+                                  updateStaticDatasource((current) => {
+                                    const nextOptions = current.options.filter(
+                                      (_, i) => i !== index,
+                                    );
+                                    const optionValues = new Set(
+                                      nextOptions.map((item) => item.value),
+                                    );
+                                    const currentDefault =
+                                      current.defaultValue &&
+                                      !current.defaultValue.isReference &&
+                                      typeof current.defaultValue.value ===
+                                        "string"
+                                        ? current.defaultValue.value
+                                        : undefined;
+
+                                    return {
+                                      ...current,
+                                      options: nextOptions,
+                                      defaultValue:
+                                        currentDefault &&
+                                        !optionValues.has(currentDefault)
+                                          ? undefined
+                                          : current.defaultValue,
+                                    };
+                                  });
+
+                                  setExpandedOptionIndexes((prev) =>
+                                    prev
+                                      .filter((i) => i !== index)
+                                      .map((i) => (i > index ? i - 1 : i)),
+                                  );
+                                }}
+                                title={
+                                  <span className="font-medium overflow-hidden text-ellipsis whitespace-nowrap">
+                                    {option.label || option.value}
+                                  </span>
+                                }
+                              >
+                                {expandedOptionIndexes.includes(index) && (
+                                  <div className="mt-3 space-y-4 pt-3 border-t border-[#DFE4EA]">
+                                    <div className="space-y-2">
+                                      <Label className="text-base font-medium text-dark">
+                                        Label
+                                      </Label>
+                                      <Input
+                                        value={option.label}
+                                        placeholder={`Option ${index + 1}`}
+                                        onChange={(e) => {
+                                          const nextLabel = e.target.value;
+                                          updateStaticDatasource((current) => ({
+                                            ...current,
+                                            options: current.options.map(
+                                              (item, i) =>
+                                                i === index
+                                                  ? { ...item, label: nextLabel }
+                                                  : item,
+                                            ),
+                                          }));
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label className="text-base font-medium text-dark">
+                                        Value
+                                      </Label>
+                                      <Input
+                                        value={option.value}
+                                        placeholder={`option_${index + 1}_${header.keyValue}`}
+                                        onChange={(e) => {
+                                          const nextValue = e.target.value;
+                                          updateStaticDatasource((current) => {
+                                            const previousValue =
+                                              current.options[index]?.value;
+                                            const nextOptions =
+                                              current.options.map((item, i) =>
+                                                i === index
+                                                  ? { ...item, value: nextValue }
+                                                  : item,
+                                              );
+                                            const currentDefault =
+                                              current.defaultValue &&
+                                              !current.defaultValue.isReference &&
+                                              typeof current.defaultValue
+                                                .value === "string"
+                                                ? current.defaultValue.value
+                                                : undefined;
+
+                                            return {
+                                              ...current,
+                                              options: nextOptions,
+                                              defaultValue:
+                                                currentDefault === previousValue
+                                                  ? {
+                                                      isReference: false,
+                                                      value: nextValue,
+                                                    }
+                                                  : current.defaultValue,
+                                            };
+                                          });
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </SortableItem>
+                            ))}
+                          </SortableList>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Default Value</Label>
+                          <Select
+                            mode="single"
+                            options={dropdownDefaultValueOptions}
+                            value={defaultDropdownValue}
+                            placeholder="Select default value"
+                            onChange={(value) =>
                               updateStaticDatasource((current) => ({
                                 ...current,
-                                options: [
-                                  ...current.options,
-                                  createStaticOption(
-                                    current.options.length,
-                                    header.keyValue,
-                                  ),
-                                ],
-                              }));
-                            }}
-                          >
-                            <PlusIcon className="text-lighten-blue" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <SortableList
-                        items={staticOptions.map((option) => ({
-                          id: option.key,
-                        }))}
-                        onDragEnd={handleDropdownOptionsDragEnd}
-                      >
-                        {staticOptions.map((option, index) => (
-                          <SortableItem
-                            key={option.key}
-                            id={option.key}
-                            expanded={expandedOptionIndexes.includes(index)}
-                            onExpand={() => {
-                              setExpandedOptionIndexes((prev) =>
-                                prev.includes(index)
-                                  ? prev.filter((i) => i !== index)
-                                  : [...prev, index],
-                              );
-                            }}
-                            onRemove={() => {
-                              if (staticOptions.length <= 1) return;
-
-                              updateStaticDatasource((current) => {
-                                const nextOptions = current.options.filter(
-                                  (_, i) => i !== index,
-                                );
-                                const optionValues = new Set(
-                                  nextOptions.map((item) => item.value),
-                                );
-                                const currentDefault =
-                                  current.defaultValue &&
-                                  !current.defaultValue.isReference &&
-                                  typeof current.defaultValue.value === "string"
-                                    ? current.defaultValue.value
-                                    : undefined;
-
-                                return {
-                                  ...current,
-                                  options: nextOptions,
-                                  defaultValue:
-                                    currentDefault &&
-                                    !optionValues.has(currentDefault)
-                                      ? undefined
-                                      : current.defaultValue,
-                                };
-                              });
-
-                              setExpandedOptionIndexes((prev) =>
-                                prev
-                                  .filter((i) => i !== index)
-                                  .map((i) => (i > index ? i - 1 : i)),
-                              );
-                            }}
-                            title={
-                              <span className="font-medium overflow-hidden text-ellipsis whitespace-nowrap">
-                                {option.label || option.value}
-                              </span>
+                                defaultValue:
+                                  value && value !== "__none__"
+                                    ? { isReference: false, value }
+                                    : undefined,
+                              }))
                             }
-                          >
-                            {expandedOptionIndexes.includes(index) && (
-                              <div className="mt-3 space-y-4 pt-3 border-t border-[#DFE4EA]">
-                                <div className="space-y-2">
-                                  <Label className="text-base font-medium text-dark">
-                                    Label
-                                  </Label>
-                                  <Input
-                                    value={option.label}
-                                    placeholder={`Option ${index + 1}`}
-                                    onChange={(e) => {
-                                      const nextLabel = e.target.value;
-                                      updateStaticDatasource((current) => ({
-                                        ...current,
-                                        options: current.options.map(
-                                          (item, i) =>
-                                            i === index
-                                              ? { ...item, label: nextLabel }
-                                              : item,
-                                        ),
-                                      }));
-                                    }}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label className="text-base font-medium text-dark">
-                                    Value
-                                  </Label>
-                                  <Input
-                                    value={option.value}
-                                    placeholder={`option_${index + 1}_${header.keyValue}`}
-                                    onChange={(e) => {
-                                      const nextValue = e.target.value;
-                                      updateStaticDatasource((current) => {
-                                        const previousValue =
-                                          current.options[index]?.value;
-                                        const nextOptions = current.options.map(
-                                          (item, i) =>
-                                            i === index
-                                              ? { ...item, value: nextValue }
-                                              : item,
-                                        );
-                                        const currentDefault =
-                                          current.defaultValue &&
-                                          !current.defaultValue.isReference &&
-                                          typeof current.defaultValue.value ===
-                                            "string"
-                                            ? current.defaultValue.value
-                                            : undefined;
+                          />
+                        </div>
+                      </>
+                    )}
 
-                                        return {
-                                          ...current,
-                                          options: nextOptions,
-                                          defaultValue:
-                                            currentDefault === previousValue
-                                              ? {
-                                                  isReference: false,
-                                                  value: nextValue,
-                                                }
-                                              : current.defaultValue,
-                                        };
-                                      });
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </SortableItem>
-                        ))}
-                      </SortableList>
-                    </div>
+                    {datasourceMode === "dynamic" && (
+                      <div className="flex flex-col gap-4">
+                        <div className="text-sm font-medium text-secondary-text">
+                          Table Configuration
+                        </div>
 
-                    <div className="space-y-2">
-                      <Label>Default Value</Label>
-                      <Select
-                        mode="single"
-                        options={dropdownDefaultValueOptions}
-                        value={defaultDropdownValue}
-                        placeholder="Select default value"
-                        onChange={(value) =>
-                          updateStaticDatasource((current) => ({
-                            ...current,
-                            defaultValue:
-                              value && value !== "__none__"
-                                ? { isReference: false, value }
-                                : undefined,
-                          }))
-                        }
-                      />
-                    </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-base font-medium text-dark" aria-required>
+                            Source Name
+                          </Label>
+                          <Select
+                            options={tableOptions}
+                            value={validTableKey}
+                            placeholder={
+                              isLoadingTables ? "Loading..." : "Select a table"
+                            }
+                            onChange={(nextTableKey: string) => {
+                              updateDynamicDatasource({
+                                table: {
+                                  tableKey: nextTableKey,
+                                  labelKey: null,
+                                  valueKey: null,
+                                },
+                                sorter: undefined,
+                              });
+                            }}
+                          />
+                        </div>
+
+                        {validTableKey && (
+                          <>
+                            <div className="flex flex-col gap-1">
+                              <Label className="text-base font-medium text-dark" aria-required>
+                                Label Column
+                              </Label>
+                              <Select
+                                options={columnOptions}
+                                value={
+                                  dynamicDatasource?.table?.labelKey ?? undefined
+                                }
+                                placeholder="Select a column"
+                                onChange={(nextKey: string) =>
+                                  updateDynamicDatasource({
+                                    table: {
+                                      tableKey:
+                                        dynamicDatasource?.table?.tableKey ??
+                                        null,
+                                      labelKey: nextKey,
+                                      valueKey:
+                                        dynamicDatasource?.table?.valueKey ??
+                                        null,
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+
+                            <div className="flex flex-col gap-1">
+                              <Label className="text-base font-medium text-dark" aria-required>
+                                Value Column
+                              </Label>
+                              <Select
+                                options={columnOptions}
+                                value={
+                                  dynamicDatasource?.table?.valueKey ?? undefined
+                                }
+                                placeholder="Select a column"
+                                onChange={(nextKey: string) =>
+                                  updateDynamicDatasource({
+                                    table: {
+                                      tableKey:
+                                        dynamicDatasource?.table?.tableKey ??
+                                        null,
+                                      labelKey:
+                                        dynamicDatasource?.table?.labelKey ??
+                                        null,
+                                      valueKey: nextKey,
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+
+                            <div className="text-sm font-medium text-secondary-text">
+                              Sorting Configuration
+                            </div>
+
+                            <div className="flex flex-col gap-1">
+                              <Label className="text-base font-medium text-dark">
+                                Sorting Column
+                              </Label>
+                              <Select
+                                options={columnOptions}
+                                value={
+                                  dynamicDatasource?.sorter?.columnKey ??
+                                  undefined
+                                }
+                                placeholder="Select a column"
+                                onChange={(nextKey: string) =>
+                                  updateDynamicDatasource({
+                                    sorter: {
+                                      ...dynamicDatasource?.sorter,
+                                      columnKey: nextKey,
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+
+                            <div
+                              className={cn(
+                                "flex flex-col gap-1 pointer-events-none opacity-30",
+                                dynamicDatasource?.sorter?.columnKey &&
+                                  "pointer-events-auto opacity-100",
+                              )}
+                            >
+                              <Label className="text-base font-medium text-dark">
+                                Sorting Order
+                              </Label>
+                              <Select
+                                options={[
+                                  { label: "Ascending (A-Z)", value: "asc", key: "asc" },
+                                  { label: "Descending (Z-A)", value: "desc", key: "desc" },
+                                ]}
+                                value={
+                                  dynamicDatasource?.sorter?.order ?? undefined
+                                }
+                                placeholder="Select order"
+                                onChange={(nextOrder: string) =>
+                                  updateDynamicDatasource({
+                                    sorter: {
+                                      ...dynamicDatasource?.sorter,
+                                      order: nextOrder as "asc" | "desc",
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </>
+                )}
+                {currentType === "expression" && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="text-base font-medium text-dark">
+                      Expression
+                    </div>
+                    <CodeEditButton
+                      variant="reference"
+                      title="Grid Column Expression"
+                      value={
+                        (
+                          header as GridHeaderItem & { expression?: string }
+                        ).expression ??
+                        "function expression() {\n  return undefined;\n}"
+                      }
+                      trigger={
+                        (header as GridHeaderItem & { expression?: string })
+                          .expression?.trim()
+                          ? (
+                              header as GridHeaderItem & {
+                                expression?: string;
+                              }
+                            ).expression!.trim()
+                          : "Click to open code editor"
+                      }
+                      onSave={(value) =>
+                        updateHeader({
+                          expression: value || "",
+                        } as Partial<GridHeaderItem>)
+                      }
+                    />
+                  </div>
                 )}
                 {headerError && (
                   <ValidationError>{headerError}</ValidationError>
                 )}
-                <div className="flex flex-row justify-between items-center">
-                  <span className="text-base font-medium text-dark">
-                    Required
-                  </span>
-                  <Toggle
-                    pressed={header.required ?? false}
-                    onPressedChange={(value) =>
-                      updateHeader({ required: value })
-                    }
-                  />
-                </div>
+                {showRequired && (
+                  <div className="flex flex-row justify-between items-center">
+                    <span className="text-base font-medium text-dark">
+                      Required
+                    </span>
+                    <Toggle
+                      pressed={header.required ?? false}
+                      onPressedChange={(value) =>
+                        updateHeader({ required: value })
+                      }
+                    />
+                  </div>
+                )}
               </div>
             ),
           },
