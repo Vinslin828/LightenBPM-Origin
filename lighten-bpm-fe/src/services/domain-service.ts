@@ -932,6 +932,7 @@ export class DomainService implements IDomainService {
         defaultOrgId: raw.defaultOrgId ? String(raw.defaultOrgId) : "",
         defaultOrgCode: raw.defaultOrgCode ? String(raw.defaultOrgCode) : "",
         isAdmin: Boolean(raw.isAdmin),
+        lang: raw.lang ?? "en",
       };
     };
 
@@ -1048,6 +1049,7 @@ export class DomainService implements IDomainService {
           defaultOrgId: raw.defaultOrgId ? String(raw.defaultOrgId) : "",
           defaultOrgCode: raw.defaultOrgCode ? String(raw.defaultOrgCode) : "",
           isAdmin: Boolean(raw.isAdmin),
+          lang: raw.lang ?? "en",
         };
       };
 

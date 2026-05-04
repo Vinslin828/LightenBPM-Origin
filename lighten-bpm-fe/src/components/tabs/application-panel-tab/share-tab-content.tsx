@@ -133,6 +133,7 @@ export default function ApplicationShare({ application }: Props) {
                           defaultOrgId: "",
                           defaultOrgCode: "",
                           isAdmin: false,
+                          lang: "en",
                         }
                       }
                     />

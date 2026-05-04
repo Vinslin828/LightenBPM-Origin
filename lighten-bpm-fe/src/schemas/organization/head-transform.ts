@@ -34,7 +34,7 @@ const toHeadUser = (user: OrgHeadResponse["user"]) => {
   return {
     id: String(user.id),
     code: "",
-    name: user.name,
+    name: user.name ?? "",
     email: user.email ?? "",
     jobGrade: user.jobGrade ?? 0,
     tags: [],
