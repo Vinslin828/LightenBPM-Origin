@@ -101,6 +101,8 @@ const ValidationRegistryPage = lazy(() =>
   })),
 );
 
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+
 // Shared / fallback
 const NotFoundPage = lazy(() =>
   import("./pages/NotFoundPage").then((m) => ({ default: m.NotFoundPage })),
@@ -144,6 +146,7 @@ const AppRoutes = () => {
   ];
 
   const protectedRoutes: Array<{ path: string; element: ReactNode }> = [
+    { path: "/profile", element: <ProfilePage /> },
     { path: "/dashboard", element: <DashboardPage /> },
     { path: "/application", element: <ApplicationListPage /> },
     { path: "/approval", element: <ApprovalListPage /> },

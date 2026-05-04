@@ -294,3 +294,18 @@ export const useUpdateUserDefaultOrg = () => {
     },
   });
 };
+
+/**
+ * Update the current user's own profile (name, lang, etc.)
+ */
+export const useUpdateMe = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: { name?: string; lang?: string }) =>
+      getDomainService().updateMe(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+    },
+  });
+};

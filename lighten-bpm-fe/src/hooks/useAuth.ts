@@ -8,6 +8,7 @@ import type { User as CognitoUser } from "@/schemas/auth";
 import { authEvents } from "@/utils/auth-events";
 import { useSetAtom } from "jotai";
 import { userAtom } from "@/store/atoms";
+import i18n from "@/i18n";
 
 const authQueryKey = ["auth", "user"];
 const meQueryKey = ["auth", "me"];
@@ -45,6 +46,11 @@ export function useAuth() {
   useEffect(() => {
     if (meData?.data && userData) {
       setUserAtom(meData.data);
+      // Apply the user's saved language preference immediately on login
+      const savedLang = meData.data.lang;
+      if (savedLang && savedLang !== i18n.language) {
+        i18n.changeLanguage(savedLang);
+      }
     } else if (!userData) {
       setUserAtom(null);
     }

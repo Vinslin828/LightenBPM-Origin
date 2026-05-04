@@ -127,6 +127,10 @@ export class MockDomainService implements IDomainService {
     throw new Error("Method not implemented.");
   }
 
+  async updateMe(_data: { name?: string; lang?: string }): Promise<ApiResponse<User>> {
+    throw new Error("Method not implemented.");
+  }
+
   private initializeMockData() {
     this.departments = mockTags;
     this.forms = mockForms;

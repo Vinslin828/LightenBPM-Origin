@@ -24,6 +24,7 @@ export function tUser(user: UserResponse): User {
     defaultOrgId: user.defaultOrgId ? user.defaultOrgId.toString() : "",
     defaultOrgCode: user.defaultOrgCode ? user.defaultOrgCode.toString() : "",
     isAdmin: user.isAdmin ?? false,
+    lang: user.lang ?? "en",
   };
 }
 export function tOrgUnit(org: OrgUnitResponse): Unit {

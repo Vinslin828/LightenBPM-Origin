@@ -1,17 +1,15 @@
-import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAppSettings } from "@/hooks/useSettings";
-import { Link } from "react-router-dom";
+import { useUpdateMe } from "@/hooks/useUser";
+import { Link, useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { BellIcon } from "@/components/icons/index";
+import { BellIcon, GlobeIcon } from "@/components/icons/index";
 import LimoLogo from "@/assets/LIMOLOGO.svg";
 import { Avatar } from "@ui/avatar";
 
@@ -20,14 +18,16 @@ interface HeaderProps {
 }
 
 export const Header = ({ className }: HeaderProps) => {
-  const { t } = useTranslation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { currentLanguage, supportedLanguages, changeLanguage } = useLanguage();
   const { updateSettings } = useAppSettings();
+  const { mutate: updateMe } = useUpdateMe();
+  const navigate = useNavigate();
 
   const handleLanguageChange = async (languageCode: string) => {
     await changeLanguage(languageCode);
     updateSettings({ language: languageCode as "en" | "zh-TW" | "zh-CN" });
+    updateMe({ lang: languageCode });
   };
 
   const getCurrentLanguageDisplay = () => {
@@ -48,28 +48,38 @@ export const Header = ({ className }: HeaderProps) => {
         </div>
       </div>
 
-      {/* Right section - language switcher */}
-      <div className="flex items-center space-x-4">
+      {/* Right section */}
+      <div className="flex items-center space-x-3">
         <BellIcon className="text-white" />
+
+        {/* Language switcher */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="rounded-full">
-              <Avatar size="sm" name={user?.name} />
+            <button className="text-white p-1 rounded hover:bg-white/10 transition-colors" title={getCurrentLanguageDisplay()}>
+              <GlobeIcon className="w-5 h-5" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56" align="end" sideOffset={12}>
-            <DropdownMenuLabel>
-              <div className="font-semibold">{user?.name}</div>
-              <div className="text-xs text-gray-500 font-normal">
-                {user?.email}
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => logout()}>
-              {t("buttons.logout")}
-            </DropdownMenuItem>
+          <DropdownMenuContent className="w-44" align="end" sideOffset={12}>
+            {supportedLanguages.map((lang) => (
+              <DropdownMenuItem
+                key={lang.code}
+                onClick={() => handleLanguageChange(lang.code)}
+                className={currentLanguage === lang.code ? "font-semibold bg-gray-100" : ""}
+              >
+                {lang.flag}&nbsp;&nbsp;{lang.name}
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Avatar → profile page */}
+        <button
+          className="rounded-full hover:ring-2 hover:ring-white/40 transition-all"
+          onClick={() => navigate("/profile")}
+          title={user?.name}
+        >
+          <Avatar size="sm" name={user?.name} />
+        </button>
       </div>
     </header>
   );

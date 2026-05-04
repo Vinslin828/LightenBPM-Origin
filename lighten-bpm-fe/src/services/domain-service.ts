@@ -218,6 +218,15 @@ export class DomainService implements IDomainService {
     };
   }
 
+  async updateMe(data: { name?: string; lang?: string }): Promise<ApiResponse<User>> {
+    const result = await apiCaller.patch("/users/me", data);
+    const parsedResult = userSchema.transform(tUser).parse(result.data);
+    return {
+      success: true,
+      data: parsedResult,
+    };
+  }
+
   //--- Form Management
   async getForms(
     options?: FormListOptions,

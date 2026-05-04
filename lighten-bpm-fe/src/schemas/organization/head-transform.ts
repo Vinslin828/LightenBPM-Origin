@@ -42,6 +42,7 @@ const toHeadUser = (user: OrgHeadResponse["user"]) => {
     defaultOrgId: user.defaultOrgId ? String(user.defaultOrgId) : "",
     defaultOrgCode: user.defaultOrgCode ? String(user.defaultOrgCode) : "",
     isAdmin: Boolean(user.isAdmin),
+    lang: (user as any).lang ?? "en",
   };
 };
 

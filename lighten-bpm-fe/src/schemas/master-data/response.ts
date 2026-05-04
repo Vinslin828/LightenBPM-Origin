@@ -22,6 +22,7 @@ export const userSchema = z.object({
   createdAt: z.string().optional(),
   updatedAt: z.string().nullable().optional(),
   isAdmin: z.boolean().optional(),
+  lang: z.string().optional(),
 });
 
 export type UserResponse = z.infer<typeof userSchema>;

@@ -56,6 +56,7 @@ import {
 
 export interface IDomainService {
   getMe(): Promise<ApiResponse<User>>;
+  updateMe(data: { name?: string; lang?: string }): Promise<ApiResponse<User>>;
   // Form Management
   getForms(
     options?: FormListOptions,
