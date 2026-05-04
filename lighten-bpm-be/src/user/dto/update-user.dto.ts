@@ -33,4 +33,13 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   defaultOrgCode?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Preferred UI language (e.g. "en", "zh-TW", "zh-CN")',
+    example: 'en',
+  })
+  @IsOptional()
+  @IsString()
+  lang?: string;
 }

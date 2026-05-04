@@ -55,6 +55,9 @@ export class UserDto {
   @ApiProperty({ description: 'is admin user', default: false })
   isAdmin: boolean;
 
+  @ApiProperty({ description: 'Preferred UI language', example: 'en', default: 'en' })
+  lang: string;
+
   constructor(data: Partial<UserDto>) {
     Object.assign(this, data);
   }
@@ -105,6 +108,7 @@ export class UserDto {
       updatedAt: user.updated_at,
       deletedAt: user.deleted_at,
       isAdmin: user.isAdmin || false,
+      lang: (user as any).lang ?? 'en',
     });
   }
 }

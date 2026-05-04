@@ -312,6 +312,7 @@ export class UserService {
             name: data.name,
             email: data.email,
             job_grade: data.jobGrade,
+            ...(data.lang !== undefined && { lang: data.lang }),
           },
           tx,
         );

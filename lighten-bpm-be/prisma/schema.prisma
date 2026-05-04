@@ -645,6 +645,7 @@ model User {
   name                      String
   email                     String?             @unique
   job_grade                 Int
+  lang                      String              @default("en")
   created_at                 DateTime            @default(now())
   updated_at                 DateTime            @updatedAt
   deleted_at                 DateTime?

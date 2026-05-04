@@ -95,6 +95,23 @@ export class UserController {
     return userDto;
   }
 
+  @Patch('me')
+  @ApiOperation({
+    summary: 'Update current user profile (name, lang, etc.)',
+    operationId: 'updateCurrentUser',
+  })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'Updated profile', type: UserDto })
+  async updateCurrentUser(
+    @CurrentUser() user: AuthUser,
+    @Body() updateUserDto: Pick<UpdateUserDto, 'name' | 'lang'>,
+  ): Promise<UserDto> {
+    const updated = await this.userService.update(user.id, updateUserDto, user.id);
+    const userDto = UserDto.fromPrisma(updated);
+    userDto.isAdmin = isAdminUser(user);
+    return userDto;
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get a user by ID',
