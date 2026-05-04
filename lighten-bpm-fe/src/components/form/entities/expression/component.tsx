@@ -50,10 +50,18 @@ export const ExpressionFieldEntity = createEntityComponent(
       ? props.entity.attributes.label.value
       : props.entity.attributes.name;
 
-    const displayValue =
-      props.entity.value === undefined || props.entity.value === null
-        ? ""
-        : String(props.entity.value);
+    const displayValue = (() => {
+      const v = props.entity.value;
+      if (v === undefined || v === null) return "";
+      if (typeof v === "string") return v;
+      if (typeof v === "number" || typeof v === "boolean") return String(v);
+      // array or object — pretty-print so the user can see the structure
+      try {
+        return JSON.stringify(v, null, 2);
+      } catch {
+        return String(v);
+      }
+    })();
     const expressionCode = props.entity.attributes.expression?.trim() ?? "";
 
     const dependencyConfig = useMemo(() => {
@@ -183,17 +191,31 @@ export const ExpressionFieldEntity = createEntityComponent(
       props.setValue,
     ]);
 
+    const isStructured =
+      props.entity.value !== null &&
+      props.entity.value !== undefined &&
+      typeof props.entity.value === "object";
+
     return (
       <div className="w-full">
         <Label htmlFor={props.entity.attributes.name || props.entity.id}>
           {label}
         </Label>
-        <div
-          id={props.entity.attributes.name || props.entity.id}
-          className="w-full min-h-12 rounded-[6px] border border-stroke bg-gray-2 px-5 py-3 text-dark"
-        >
-          {displayValue}
-        </div>
+        {isStructured ? (
+          <pre
+            id={props.entity.attributes.name || props.entity.id}
+            className="w-full min-h-12 rounded-[6px] border border-stroke bg-gray-2 px-5 py-3 text-dark text-sm font-mono whitespace-pre-wrap break-words overflow-auto max-h-64"
+          >
+            {displayValue}
+          </pre>
+        ) : (
+          <div
+            id={props.entity.attributes.name || props.entity.id}
+            className="w-full min-h-12 rounded-[6px] border border-stroke bg-gray-2 px-5 py-3 text-dark"
+          >
+            {displayValue}
+          </div>
+        )}
       </div>
     );
   },
