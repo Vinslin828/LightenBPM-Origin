@@ -225,7 +225,7 @@ export class UserRepository {
   }
 
   async createUser(
-    data: Omit<User, 'id' | 'created_at' | 'updated_at' | 'deleted_at'>,
+    data: Omit<User, 'id' | 'created_at' | 'updated_at' | 'deleted_at' | 'lang'> & { lang?: string },
     tx?: PrismaTransactionClient,
   ): Promise<UserWithOrg> {
     try {
