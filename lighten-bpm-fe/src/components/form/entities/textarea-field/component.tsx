@@ -8,6 +8,7 @@ import { createEntityComponent } from "@coltorapps/builder-react";
 import { textareaFieldEntity } from "./definition";
 import { useRefWithErrorFocus } from "@/utils/error-focus";
 import { useFieldValidationState } from "@/hooks/useFieldValidationState";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 
 export const TextareaFieldEntity = createEntityComponent(
   textareaFieldEntity,
@@ -18,6 +19,11 @@ export const TextareaFieldEntity = createEntityComponent(
 
     const inputRef = useRefWithErrorFocus<HTMLTextAreaElement>(
       props.entity.error,
+    );
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      props.entity.attributes.name,
     );
 
     const handleValidation = async (nextValue?: string) => {
@@ -65,9 +71,7 @@ export const TextareaFieldEntity = createEntityComponent(
     return (
       <div className="w-full">
         <Label htmlFor={id} aria-required={props.entity.attributes.required}>
-          {!!props.entity.attributes.label.value
-            ? props.entity.attributes.label.value
-            : props.entity.attributes.name}
+          {label}
         </Label>
 
         <Textarea

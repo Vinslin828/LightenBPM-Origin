@@ -14,6 +14,7 @@ import { EntityKey } from "@/types/form-builder";
 import { dateSubtypeAttribute } from "../../attributes/date-subtype/definition";
 import { validatorAttribute } from "../../attributes/validator/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const datePickerFieldEntity = createEntity({
   name: EntityKey.datePickerField,
@@ -29,6 +30,7 @@ export const datePickerFieldEntity = createEntity({
     defaultDateValueAttribute,
     validatorAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     const schema = z.number().int();

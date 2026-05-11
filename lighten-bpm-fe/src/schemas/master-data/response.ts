@@ -31,6 +31,7 @@ const orgSchema = z.object({
   id: z.number(),
   code: z.string(),
   name: z.string(),
+  nameTranslations: z.record(z.string(), z.string()).optional(),
   type: z.enum(["ORG_UNIT", "ROLE"]),
   parent: z.string().optional(),
   members: z.array(userSchema),
@@ -42,6 +43,7 @@ interface OrgUnit {
   id: number;
   code: string;
   name: string;
+  nameTranslations?: Record<string, string>;
   type: "ORG_UNIT" | "ROLE";
   parent?: OrgUnit;
   children?: z.infer<typeof orgSchema>[];
@@ -56,6 +58,7 @@ export const orgUnitSchema: z.ZodType<OrgUnit> = z.lazy(() =>
     id: z.number(),
     code: z.string(),
     name: z.string(),
+    nameTranslations: z.record(z.string(), z.string()).optional(),
     type: z.enum(["ORG_UNIT", "ROLE"]),
     parent: orgUnitSchema.optional(),
     children: z.array(orgSchema).optional(),

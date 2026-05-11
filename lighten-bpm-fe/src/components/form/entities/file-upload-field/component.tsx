@@ -14,6 +14,7 @@ import { useAttachmentDownload } from "@/hooks/useAttachmentDownload";
 import { useApplicationAttachments } from "@/hooks/useApplicationAttachments";
 import { useApplicationAttachmentUpload } from "@/hooks/useApplicationAttachmentUpload";
 import type { Attachment } from "@/types/attachment";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -394,7 +395,9 @@ const UploadingCard = ({
                 {formatBytes(fileSize * (progress / 100))} of{" "}
                 {formatBytes(fileSize)}
               </span>
-              <span className="text-lighten-blue font-medium">Uploading...</span>
+              <span className="text-lighten-blue font-medium">
+                Uploading...
+              </span>
             </div>
             <div className="w-full bg-gray-3 rounded-full h-1.5">
               <div
@@ -459,6 +462,11 @@ export const FileUploadFieldEntity = createEntityComponent(
     const isDisabled = Boolean(attributes.disabled);
     const fieldKey =
       typeof name === "string" && name.trim() ? name.trim() : entityId;
+    const translatedLabel = useEntityLabel(
+      entityId,
+      label.value || name,
+      fieldKey,
+    );
 
     // ── Form value: attachment_id(s) ────────────────────────────────────────
     const idList: number[] = (() => {
@@ -741,7 +749,7 @@ export const FileUploadFieldEntity = createEntityComponent(
     const hasMoreCommittedFiles = idList.length > MAX_VISIBLE_FILES;
     const hasMoreReviewFiles = reviewAttachments.length > MAX_VISIBLE_FILES;
 
-    const modalTitle = label.value || name || "Files";
+    const modalTitle = translatedLabel || "Files";
 
     const handleClear = useCallback(() => {
       props.setValue(undefined);
@@ -756,7 +764,7 @@ export const FileUploadFieldEntity = createEntityComponent(
           htmlFor={isInteractive ? id : undefined}
           aria-required={required}
         >
-          {!!label.value ? label.value : name}
+          {translatedLabel}
         </Label>
 
         {isLoadingAppAttachments && isReviewMode ? (

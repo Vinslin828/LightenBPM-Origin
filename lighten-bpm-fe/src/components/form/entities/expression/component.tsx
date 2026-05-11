@@ -9,6 +9,7 @@ import {
   extractReferencedFieldNames,
   getFieldIdByName,
 } from "@/hooks/useCode/utils";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 import { expressionFieldEntity } from "./definition";
 
 const areValuesEqual = (a: unknown, b: unknown) => {
@@ -46,9 +47,11 @@ export const ExpressionFieldEntity = createEntityComponent(
       application: runtimeApplication,
     });
 
-    const label = !!props.entity.attributes.label.value
-      ? props.entity.attributes.label.value
-      : props.entity.attributes.name;
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      props.entity.attributes.name,
+    );
 
     const displayValue = (() => {
       const v = props.entity.value;

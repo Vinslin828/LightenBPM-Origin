@@ -10,6 +10,7 @@ import { disabledAttribute } from "../../attributes/disabled/definition";
 import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { requiredAttribute } from "../../attributes/required/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 // 無右側UI
 export const columnWidthsAttribute = createAttribute({
@@ -40,6 +41,7 @@ export const containerEntity = createEntity({
     disabledAttribute,
     readonlyAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   childrenAllowed: true,
   validate(value) {

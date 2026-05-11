@@ -19,6 +19,18 @@ const QUERY_KEYS = {
   datasetRecords: (code: string) => ["datasets", code, "records"] as const,
 };
 
+const ORG_UNIT_TRANSLATIONS_DATASET = "ORG_UNIT_TRANSLATIONS";
+
+const invalidateDatasetSideEffects = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  code: string,
+) => {
+  if (code === ORG_UNIT_TRANSLATIONS_DATASET) {
+    queryClient.invalidateQueries({ queryKey: ["org-units"] });
+    queryClient.invalidateQueries({ queryKey: ["org-roles"] });
+  }
+};
+
 export const useDatasets = (params?: { page?: number; limit?: number }) => {
   const {
     data: { data: paginated } = {},
@@ -167,6 +179,7 @@ export const useCreateDatasetRecords = (code: string) => {
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.datasetRecords(code),
       });
+      invalidateDatasetSideEffects(queryClient, code);
     },
   });
 };
@@ -182,6 +195,7 @@ export const useUpdateDatasetRecords = (code: string, fieldNames: string[]) => {
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.datasetRecords(code),
       });
+      invalidateDatasetSideEffects(queryClient, code);
     },
   });
 };
@@ -196,6 +210,7 @@ export const useDeleteDatasetRecords = (code: string, fieldNames: string[]) => {
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.datasetRecords(code),
       });
+      invalidateDatasetSideEffects(queryClient, code);
     },
   });
 };
@@ -209,6 +224,7 @@ export const useImportDatasetCsv = (code: string) => {
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.datasetRecords(code),
       });
+      invalidateDatasetSideEffects(queryClient, code);
     },
   });
 };

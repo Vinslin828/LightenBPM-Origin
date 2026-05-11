@@ -11,6 +11,7 @@ import { EntityKey } from "@/types/form-builder";
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { requiredAttribute } from "../../attributes/required/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 import { hideResponseDataAttribute } from "../../attributes/hide-response-data/definition";
 
 export const buttonApiEntity = createEntity({
@@ -26,6 +27,7 @@ export const buttonApiEntity = createEntity({
     disabledAttribute,
     requiredAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     return z.string().optional().parse(value);

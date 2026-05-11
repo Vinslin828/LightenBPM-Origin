@@ -11,6 +11,7 @@ import { EntityKey } from "@/types/form-builder";
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const fileDownloadFieldEntity = createEntity({
   name: EntityKey.buttonDownload,
@@ -24,6 +25,7 @@ export const fileDownloadFieldEntity = createEntity({
     disabledAttribute,
     readonlyAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     // File download is an action button, no user-input value to validate

@@ -13,6 +13,7 @@ import { EntityKey } from "@/types/form-builder";
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const buttonUrlEntity = createEntity({
   name: EntityKey.buttonUrl,
@@ -28,6 +29,7 @@ export const buttonUrlEntity = createEntity({
     disabledAttribute,
     readonlyAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     return z.undefined().optional().parse(value);

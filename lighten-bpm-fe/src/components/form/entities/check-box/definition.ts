@@ -14,6 +14,7 @@ import { defaultMultiOptionValueAttribute } from "../../attributes/default-multi
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const checkboxFieldEntity = createEntity({
   name: EntityKey.checkboxField,
@@ -29,6 +30,7 @@ export const checkboxFieldEntity = createEntity({
     disabledAttribute,
     readonlyAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     const optionValues =

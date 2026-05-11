@@ -131,9 +131,37 @@ export class MockDomainService implements IDomainService {
     throw new Error("Method not implemented.");
   }
 
+  // ---------------------------------------------------------------------------
+  // localStorage persistence for forms (survives hard refresh in mock mode)
+  // ---------------------------------------------------------------------------
+  private static FORMS_STORAGE_KEY = "mock_forms_v1";
+
+  private loadFormsFromStorage(): FormDefinition[] | null {
+    try {
+      const raw = localStorage.getItem(MockDomainService.FORMS_STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw) as FormDefinition[];
+    } catch {
+      return null;
+    }
+  }
+
+  private saveFormsToStorage() {
+    try {
+      localStorage.setItem(
+        MockDomainService.FORMS_STORAGE_KEY,
+        JSON.stringify(this.forms),
+      );
+    } catch {
+      // ignore quota errors
+    }
+  }
+
   private initializeMockData() {
     this.departments = mockTags;
-    this.forms = mockForms;
+    // Restore previously saved forms from localStorage so that language/translation
+    // settings survive a hard refresh in mock (dev) mode.
+    this.forms = this.loadFormsFromStorage() ?? mockForms;
     this.workflows = mockFlows;
     this.applications = mockApplications;
     console.log(
@@ -269,6 +297,7 @@ export class MockDomainService implements IDomainService {
       ...form,
       updatedAt: "",
     };
+    this.saveFormsToStorage();
     return {
       success: true,
       data: this.forms[index],

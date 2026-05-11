@@ -2,13 +2,16 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { createEntityComponent } from "@coltorapps/builder-react";
 import { fileDownloadFieldEntity } from "./definition";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 
 export const FileDownloadFieldEntity = createEntityComponent(
   fileDownloadFieldEntity,
   function FileDownloadFieldEntity(props) {
-    const label = !!props.entity.attributes.label.value
-      ? props.entity.attributes.label.value
-      : props.entity.attributes.name;
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      props.entity.attributes.name,
+    );
 
     const buttonText = props.entity.attributes.buttonText?.trim()
       ? props.entity.attributes.buttonText

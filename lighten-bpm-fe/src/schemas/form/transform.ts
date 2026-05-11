@@ -24,6 +24,8 @@ export function tFormStatusSchema(status: FormRevisionResponse["status"]) {
   }
 }
 export function tFormSchema(data: FormResponse) {
+  const v = data.revision.validation;
+  console.log("[tFormSchema] validation from API:", v);
   return {
     id: data.id,
     revisionId: data.revision.revision_id,
@@ -38,7 +40,12 @@ export function tFormSchema(data: FormResponse) {
     updatedAt: "",
     publishStatus: tFormStatusSchema(data.revision.status),
     tags: data.tags.map((tag) => tTag(tag)),
-    validation: data.revision.validation ?? { required: false, validators: [] },
+    validation: v
+      ? { required: v.required, validators: v.validators }
+      : { required: false, validators: [] },
+    defaultLang: v?.defaultLang,
+    translationLangs: v?.translationLangs,
+    labelTranslations: v?.labelTranslations,
   } satisfies FormDefinition;
 }
 
@@ -48,6 +55,7 @@ export function tFormRevisionSchema(revision: FormRevisionResponse) {
     entities: revision.form_schema?.entities ?? {},
   });
   console.debug({ deparseForm: deparsedSchema });
+  const v = revision.validation;
   return {
     id: revision.form_id,
     revisionId: revision.revision_id,
@@ -59,7 +67,12 @@ export function tFormRevisionSchema(revision: FormRevisionResponse) {
     updatedAt: "",
     publishStatus: tFormStatusSchema(revision.status),
     tags: [],
-    validation: revision.validation ?? { required: false, validators: [] },
+    validation: v
+      ? { required: v.required, validators: v.validators }
+      : { required: false, validators: [] },
+    defaultLang: v?.defaultLang,
+    translationLangs: v?.translationLangs,
+    labelTranslations: v?.labelTranslations,
   } satisfies FormDefinition;
 }
 export function tFormListItemSchema(data: FormListItemResponse) {

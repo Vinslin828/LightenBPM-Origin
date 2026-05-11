@@ -33,6 +33,94 @@ getFormField("currency_abc123").value; // 1500.50
 getFormField("currency_abc123").currencyCode; // 'USD'
 ```
 
+## Dynamic Field Status Expression
+
+用於欄位的 Dynamic Status 設定。Expression 需要回傳狀態代碼陣列，系統會依照回傳值動態控制元件狀態。
+
+可用狀態代碼
+
+- `HD`：Hide，隱藏元件
+- `SH`：Show，顯示元件（可覆蓋表單設計中的靜態 Hide）
+- `RQ`：Required，設為必填
+- `RO`：Read only，設為唯讀
+- `DS`：Disabled，設為停用
+
+### 狀態代碼優先順序
+
+Expression 可以回傳一個或多個狀態代碼，例如 `["RQ", "RO"]`。
+
+同一個 Expression 回傳多個狀態時，規則如下：
+
+- `HD` 優先於 `SH`。如果同時回傳 `["HD", "SH"]`，元件會被隱藏。
+- `SH` 只用來覆蓋表單設計中的靜態 Hide，讓原本被靜態隱藏的元件顯示。
+- `RQ`、`RO`、`DS` 可以同時生效。例如 `["RQ", "RO"]` 代表必填且唯讀。
+- 回傳空陣列 `[]` 代表不套用任何動態狀態，元件會回到靜態設定或 Flow 設定決定的狀態。
+
+### Static / Dynamic / Flow 優先順序
+
+欄位狀態可能來自三個來源：
+
+- Static setting：表單設計時設定的 Hide / Required / Read only / Disabled。
+- Dynamic setting：欄位 Dynamic Status Expression 回傳的 `HD` / `SH` / `RQ` / `RO` / `DS`。
+- Flow setting：Flow design 中針對表單或簽核節點設定的 component visibility / editable / disabled / required。
+
+整體優先順序如下：
+
+1. Flow setting 最高優先。Flow 隱藏的欄位會由後端移除，Dynamic Status 不能用 `SH` 顯示回來。
+2. Dynamic setting 次優先。Dynamic Status 可以加強或覆蓋表單靜態設定，例如用 `SH` 顯示靜態隱藏的欄位，或用 `RQ` 讓欄位變必填。
+3. Static setting 是預設狀態。當 Dynamic Status 回傳 `[]` 或未啟用時，欄位使用表單設計中的靜態設定。
+
+簡化規則：
+
+```ts
+// Hide / Show
+Flow hide > Dynamic HD > Dynamic SH > Static hide
+
+// Required
+Flow required OR Dynamic RQ OR Static required
+
+// Read only
+Flow readonly OR Dynamic RO OR Static readonly
+
+// Disabled
+Flow disabled OR Dynamic DS OR Static disabled
+```
+
+### 依欄位是否有值來顯示或隱藏元件
+
+如果 `apcntDep` 有值就顯示目前元件，沒有值就隱藏：
+
+```ts
+function expression() {
+  const value = getFormField("apcntDep").value;
+
+  if (value !== undefined && value !== null && String(value).trim() !== "") {
+    return ["SH"];
+  }
+
+  return ["HD"];
+}
+```
+
+簡短寫法：
+
+```ts
+function expression() {
+  return getFormField("apcntDep").value ? ["SH"] : ["HD"];
+}
+```
+
+如果欄位值可能是 Dropdown / Reference 物件，可用較安全的寫法：
+
+```ts
+function expression() {
+  const field = getFormField("apcntDep");
+  const value = field.value?.value ?? field.value;
+
+  return value ? ["SH"] : ["HD"];
+}
+```
+
 ### getApplicantProfile()
 
 取得申請人的基本資料。
@@ -47,6 +135,7 @@ getFormField("currency_abc123").currencyCode; // 'USD'
   email: string;
   jobGrade: number;
   defaultOrgId: string;
+  defaultOrgName: string;
 }
 ```
 
@@ -55,6 +144,7 @@ getFormField("currency_abc123").currencyCode; // 'USD'
 ```ts
 getApplicantProfile().jobGrade; // 40
 getApplicantProfile().defaultOrgId; // 4
+getApplicantProfile().defaultOrgName; // "GSM"
 getApplicantProfile().name; // "John Doe"
 ```
 

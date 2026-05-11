@@ -1,33 +1,40 @@
 import { ReactNode, createContext, Dispatch, SetStateAction } from "react";
 import { BuilderStore } from "@coltorapps/builder";
-
 import {
   BuilderEntities,
-  BuilderEntity,
   useBuilderStoreData,
 } from "@coltorapps/builder-react";
-import { basicFormBuilder } from "./definition";
-import { DndContainer, DndItem } from "@/components/dnd";
+import { useDroppable } from "@dnd-kit/core";
+
+import { CANVAS_DROP_ZONE_ID, DndItem } from "@/components/dnd";
 import { cn } from "@/utils/cn";
 import { entitiesComponents, getEntityLabelKey } from "@/const/form-builder";
 import { Button } from "@ui/button";
-
-export const FormBuilderModeContext = createContext<boolean>(false);
-import { HideIcon, TrashIcon } from "@/components/icons";
+import { TrashIcon } from "@/components/icons";
 import { useTranslation } from "react-i18next";
 import { EntityKey, ContainerDefaults } from "@/types/form-builder";
-import FieldNameCopy from "@ui/button/field-name-copy-button";
+import { basicFormBuilder } from "./definition";
+
+export const FormBuilderModeContext = createContext<boolean>(false);
+
 type Props = {
   builderStore: BuilderStore<typeof basicFormBuilder>;
   activeEntityId: string | null;
   setActiveEntityId: Dispatch<SetStateAction<string | null>>;
+  draggingId?: string | null;
+  paletteDropIndex?: number | null;
 };
 
 export default function Canvas({
   builderStore,
   activeEntityId,
   setActiveEntityId,
+  draggingId,
+  paletteDropIndex,
 }: Props) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: CANVAS_DROP_ZONE_ID,
+  });
   const {
     schema: { root },
   } = useBuilderStoreData(builderStore, (events) =>
@@ -35,21 +42,24 @@ export default function Canvas({
       (event) => event.name === "RootUpdated" || event.name === "DataSet",
     ),
   );
+
   return (
     <div className="flex-1 flex flex-col max-h-full overflow-y-auto bg-[size:25px_25px] bg-[radial-gradient(circle_at_2px_2px,#dfe0e4_2px,#E5E7EB_2px)]">
       <div
+        ref={setNodeRef}
         className="flex-1 p-12"
-        // onFocusCapture={(e) => {
-        //   e.preventDefault();
-        //   e.stopPropagation();
-        // }}
         onClick={() => {
-          console.debug("onlcik");
           setActiveEntityId(null);
         }}
       >
         {!root.length ? (
-          <div className="h-full flex flex-col items-center justify-center gap-2">
+          <div
+            className={cn(
+              "h-full flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-transparent transition-colors relative",
+              isOver && "border-lighten-blue bg-lighten-blue/10",
+            )}
+          >
+            {paletteDropIndex !== null && <DropIndicator />}
             <span className="text-primary-text text-lg">Build your form</span>
             <span className="text-secondary-text text-base font-body-small-regular">
               Drag and drop components here to start designing.
@@ -57,80 +67,63 @@ export default function Canvas({
           </div>
         ) : (
           <FormBuilderModeContext.Provider value={true}>
-            <div className="min-h-full">
-              <DndContainer
+            <div
+              className={cn(
+                "min-h-full rounded-lg border border-dashed border-transparent transition-colors",
+                isOver && "border-lighten-blue bg-lighten-blue/5",
+              )}
+            >
+              {paletteDropIndex === 0 && <DropIndicator />}
+              <BuilderEntities
                 builderStore={builderStore}
-                dragOverlay={({ draggingId }) =>
-                  draggingId ? (
-                    <BuilderEntity
-                      entityId={draggingId}
-                      builderStore={builderStore}
-                      components={entitiesComponents}
-                    >
-                      {(props) => (
+                components={entitiesComponents}
+              >
+                {(props) => {
+                  const parentEntity = props.entity.parentId
+                    ? builderStore.getEntity(props.entity.parentId)
+                    : null;
+                  const rootIndex = root.indexOf(props.entity.id);
+                  const isRootEntity = rootIndex >= 0;
+
+                  return (
+                    <>
+                      <DndItem
+                        id={props.entity.id}
+                        className={cn(
+                          "bg-white first:rounded-t-md last:rounded-b-md flex-1 flex flex-col overflow-hidden",
+                          {
+                            "bg-transparent": props.entity.type === "container",
+                            "rounded-md": parentEntity?.type === "container",
+                          },
+                        )}
+                      >
                         <Entity
-                          isActive
-                          isDragging
                           builderStore={builderStore}
                           entityId={props.entity.id}
+                          isActive={
+                            activeEntityId === props.entity.id &&
+                            draggingId !== props.entity.id
+                          }
+                          isDragging={draggingId === props.entity.id}
+                          onFocus={() =>
+                            activeEntityId === props.entity.id
+                              ? setActiveEntityId(null)
+                              : setActiveEntityId(props.entity.id)
+                          }
+                          onDelete={() =>
+                            builderStore.deleteEntity(props.entity.id)
+                          }
                         >
                           {props.children}
                         </Entity>
+                      </DndItem>
+                      {isRootEntity && paletteDropIndex === rootIndex + 1 && (
+                        <DropIndicator />
                       )}
-                    </BuilderEntity>
-                  ) : null
-                }
-              >
-                {({ draggingId }) => (
-                  <div>
-                    <BuilderEntities
-                      builderStore={builderStore}
-                      components={entitiesComponents}
-                    >
-                      {(props) => {
-                        const parentEntity = props.entity.parentId
-                          ? builderStore.getEntity(props.entity.parentId)
-                          : null;
-
-                        return (
-                          <DndItem
-                            id={props.entity.id}
-                            className={cn(
-                              "bg-white first:rounded-t-md last:rounded-b-md flex-1 flex flex-col overflow-hidden",
-                              {
-                                "bg-transparent":
-                                  props.entity.type === "container",
-                                "rounded-md":
-                                  parentEntity?.type === "container",
-                              },
-                            )}
-                          >
-                            <Entity
-                              builderStore={builderStore}
-                              entityId={props.entity.id}
-                              isActive={
-                                activeEntityId === props.entity.id &&
-                                draggingId !== props.entity.id
-                              }
-                              isDragging={draggingId === props.entity.id}
-                              onFocus={() =>
-                                activeEntityId === props.entity.id
-                                  ? setActiveEntityId(null)
-                                  : setActiveEntityId(props.entity.id)
-                              }
-                              onDelete={() =>
-                                builderStore.deleteEntity(props.entity.id)
-                              }
-                            >
-                              {props.children}
-                            </Entity>
-                          </DndItem>
-                        );
-                      }}
-                    </BuilderEntities>
-                  </div>
-                )}
-              </DndContainer>
+                    </>
+                  );
+                }}
+              </BuilderEntities>
             </div>
           </FormBuilderModeContext.Provider>
         )}
@@ -138,6 +131,16 @@ export default function Canvas({
     </div>
   );
 }
+
+function DropIndicator() {
+  return (
+    <div className="relative h-3 pointer-events-none">
+      <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-lighten-blue" />
+      <div className="absolute left-0 top-1/2 size-2 -translate-y-1/2 rounded-full bg-lighten-blue" />
+    </div>
+  );
+}
+
 function Entity(props: {
   entityId: string;
   children: ReactNode;
@@ -173,7 +176,6 @@ function Entity(props: {
           (attributes as unknown as ContainerDefaults).containerColumns ?? 2,
       })})`
     : "";
-  const isHide = attributes.hide;
 
   return (
     <div
@@ -186,7 +188,6 @@ function Entity(props: {
             !props.isActive &&
             entitiesAttributesErrors[props.entityId] &&
             !props.isDragging,
-          // "bg-gray": isHide,
         },
       )}
       onFocusCapture={(e) => {
@@ -199,9 +200,6 @@ function Entity(props: {
         props.onFocus?.();
       }}
     >
-      {/* <div className="flex flex-row justify-end pb-3">
-        <HideIcon className="text-primary-text size-4" />
-      </div> */}
       <div className="flex flex-row justify-between">
         {(props.isDragging || props.isActive) && (
           <span className="text-primary-text text-xs font-base pb-3">
@@ -210,7 +208,7 @@ function Entity(props: {
         )}
         {props.isActive && (
           <Button
-            variant={"icon"}
+            variant="icon"
             icon={<TrashIcon className="text-red" />}
             className="p-0 bg-red-50 rounded-full h-5 w-5 cursor-pointer"
             onClick={(e) => {
@@ -224,15 +222,6 @@ function Entity(props: {
           />
         )}
       </div>
-      {/* <FieldNameCopy
-        fieldName={
-          props.builderStore.getEntity(props.entityId)?.attributes
-            .name as string
-        }
-      />
-      <div className="pointer-events-none -translate-y-[20px]">
-        {props.children}
-      </div> */}
 
       <div
         className={cn("flex-1 flex flex-col justify-start", {
@@ -240,12 +229,7 @@ function Entity(props: {
         })}
       >
         {!isContainer ? (
-          <div className="flex justify-end pointer-events-auto min-w-0">
-            {/* <FieldNameCopy
-              fieldName={(entity.attributes as { name?: string }).name ?? ""}
-            /> */}
-            {/* TODO: visibility indicator */}
-          </div>
+          <div className="flex justify-end pointer-events-auto min-w-0" />
         ) : null}
         {props.children}
       </div>

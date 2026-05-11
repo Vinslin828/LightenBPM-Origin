@@ -5,6 +5,7 @@ import { formatError, ValidationError } from "@/components/ui/validation-error";
 import { cn } from "@/utils/cn";
 import { useRefWithErrorFocus } from "@/utils/error-focus";
 import { useFieldValidationState } from "@/hooks/useFieldValidationState";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 
 import { datePickerFieldEntity } from "./definition";
 import { useId } from "react";
@@ -16,6 +17,11 @@ export const DatePickerFieldEntity = createEntityComponent(
     const inputRef = useRefWithErrorFocus<HTMLInputElement>(props.entity.error);
     const { localError, isValidating, validateAndCommit } =
       useFieldValidationState(props.entity.id);
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      props.entity.attributes.name,
+    );
 
     const hasError =
       !!localError ||
@@ -111,9 +117,7 @@ export const DatePickerFieldEntity = createEntityComponent(
     return (
       <div className="w-full">
         <Label aria-required={props.entity.attributes.required} htmlFor={id}>
-          {!!props.entity.attributes.label.value
-            ? props.entity.attributes.label.value
-            : props.entity.attributes.name}
+          {label}
         </Label>
         <div>{renderPicker()}</div>
         {isValidating ? (

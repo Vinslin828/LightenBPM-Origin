@@ -14,6 +14,8 @@ import { useAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SelectOption } from "@ui/select/single-select";
 import type { DropdownDynamicDatasource } from "@/components/ui/DataGrid/grid-data-grid.types";
+import { useTranslation } from "react-i18next";
+import { localizeOrgUnit, localizeOrgUnits } from "@/utils/localized-org-unit";
 const getMasterDataService = () =>
   container.get<IMasterDataService>(TYPES.MasterDataService);
 
@@ -181,40 +183,60 @@ export const useUsersInfinite = (search?: string) => {
 };
 
 export const useOrgUnits = (name?: string) => {
+  const { i18n } = useTranslation();
   const normalizedName = name?.trim() || undefined;
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEYS.orgUnits(normalizedName),
     queryFn: () => getMasterDataService().getOrgUnits(normalizedName),
   });
-  return { units: data?.data, isLoading, error };
+  const units = useMemo(
+    () => localizeOrgUnits(data?.data ?? [], i18n.language),
+    [data?.data, i18n.language],
+  );
+  return { units, isLoading, error };
 };
 export const useOrgById = (id?: string) => {
+  const { i18n } = useTranslation();
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEYS.orgUnitById(id),
     queryFn: () => getMasterDataService().getOrgUnitById(id as string),
     enabled: !!id,
   });
-  return { unit: data?.data, isLoading, error };
+  const unit = useMemo(
+    () => (data?.data ? localizeOrgUnit(data.data, i18n.language) : undefined),
+    [data?.data, i18n.language],
+  );
+  return { unit, isLoading, error };
 };
 export const useOrgByCode = (code?: string) => {
+  const { i18n } = useTranslation();
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEYS.orgUnitByCode(code),
     queryFn: () => getMasterDataService().getOrgUnitByCode(code as string),
     enabled: !!code,
   });
-  return { unit: data?.data, isLoading, error };
+  const unit = useMemo(
+    () => (data?.data ? localizeOrgUnit(data.data, i18n.language) : undefined),
+    [data?.data, i18n.language],
+  );
+  return { unit, isLoading, error };
 };
 
 export const useOrgUnitHeads = () => {
   // const {};
 };
 export const useOrgRoles = (name?: string) => {
+  const { i18n } = useTranslation();
   const normalizedName = name?.trim() || undefined;
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEYS.orgRoles(normalizedName),
     queryFn: () => getMasterDataService().getOrgRoles(normalizedName),
   });
-  return { roles: data?.data, isLoading, error };
+  const roles = useMemo(
+    () => localizeOrgUnits(data?.data ?? [], i18n.language),
+    [data?.data, i18n.language],
+  );
+  return { roles, isLoading, error };
 };
 export const useUser = (id?: string) => {
   const { data, isLoading, error } = useQuery({

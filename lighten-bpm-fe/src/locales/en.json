@@ -57,6 +57,9 @@
     "fill_out_form_correctly": "Please fill out the form correctly.",
     "form_saved_as_draft": "Form saved as draft",
     "form_saved_as_published": "Form saved as published",
+    "save_form_changes_before_translations": "Save form changes first",
+    "save_form_changes_before_translations_desc": "Please fix and save the current Form Builder changes before saving translations.",
+    "unsaved_form_changes_confirm": "You have unsaved form changes. Leave this page anyway?",
     "submission_failed_title": "Submission Failed",
     "submission_failed_description": "There was an error submitting your application. Please try again.",
     "fix_highlighted_errors_at_component": "Please fix the highlighted errors at {{component}} component.",
@@ -166,6 +169,12 @@
     "enter_email": "Enter your email",
     "enter_password": "Enter your password"
   },
+  "form_list": {
+    "title": "Form Management",
+    "import": "Import",
+    "new_form": "New Form",
+    "search_placeholder": "Search here..."
+  },
   "form_builder": {
     "drag_field_here": "Drag fields here to build your form",
     "form_name": "Form Name",
@@ -176,6 +185,11 @@
     "type_here": "Type here...",
     "duplicate_field_name": "Field name \"{{name}}\" is duplicated. Please use a unique field name.",
     "enter_form_name": "Enter form name",
+    "save_status": {
+      "saved": "Saved",
+      "unsaved": "Unsaved changes",
+      "saving": "Saving"
+    },
     "entities": {
       "text_field": "Input",
       "textarea_field": "Textarea",
@@ -212,7 +226,25 @@
       "schema_generation": "Schema Generation",
       "template": "Template",
       "component": "Component"
-    }
+    },
+    "default_lang": "Default Language",
+    "add_language": "Add Language",
+    "remove_language": "Remove Language",
+    "select_language": "Select a language",
+    "language_editor_default": "Default Language",
+    "language_editor_empty": "Open a form to start editing translations.",
+    "language_editor_no_fields": "No form fields found. Add fields in the Form Builder tab first.",
+    "field_name": "Field",
+    "default": "default",
+    "copy_all": "Copy",
+    "copied": "Copied!",
+    "copy_column": "Copy all labels to clipboard",
+    "paste_all": "Paste All",
+    "paste_all_title": "Paste {{lang}} translations",
+    "paste_all_hint": "Paste one translated label per line — same order as the reference column.",
+    "paste_reference": "Reference (default)",
+    "paste_line_mismatch": "Line count mismatch: expected {{expected}}, got {{got}}",
+    "saved": "Saved!"
   },
   "flow": {
     "title": "Flow Engine",
@@ -259,7 +291,8 @@
       "select_role": "Select role",
       "select_a_role": "Select a role",
       "advanced_settings": "Advanced Settings",
-      "organization_reference_field": "Organization reference field"
+      "organization_reference_field": "Organization reference field",
+      "organization_reference_field_helper": "Use this when an applicant belongs to multiple departments and chooses the applying organization in the form. The expression should return the selected organization id or organization code."
     }
   },
   "approver_type": {
@@ -384,11 +417,14 @@
     "save": "Save",
     "saved": "Role saved successfully",
     "save_error": "Failed to save role",
-    "delete": "Delete",
-    "confirm_delete_title": "Delete",
+    "delete": "Delete Role",
+    "confirm_delete_title": "Delete Role",
     "confirm_delete_message": "Once deleted, this role cannot be recovered.\nAre you sure you want to delete?",
     "delete_success": "Role deleted successfully",
     "delete_error": "Failed to delete role",
+    "danger_zone": "Danger Zone",
+    "delete_warning": "Permanently delete this role. This action cannot be undone.",
+    "delete_disabled_hint": "Remove all members before deleting this role.",
     "select_to_view": "Select a role to view details",
     "no_role": "No role",
     "empty_hint": "You can click here to start building.",

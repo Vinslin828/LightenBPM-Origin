@@ -31,6 +31,8 @@ export function tOrgUnit(org: OrgUnitResponse): Unit {
   return {
     id: org.id.toString(),
     name: org.name,
+    defaultName: org.name,
+    nameTranslations: org.nameTranslations,
     members: org.members?.map((m) => tUser(m)) ?? [],
     code: org.code,
     parent: org.parent ? tOrgUnit(org.parent) : undefined,

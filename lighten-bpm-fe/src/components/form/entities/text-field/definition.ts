@@ -15,6 +15,7 @@ import { EntityKey } from "@/types/form-builder";
 import { flowTypeAttribute } from "../../attributes/flow-type/definition";
 import { validatorAttribute } from "../../attributes/validator/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const textFieldEntity = createEntity({
   name: EntityKey.textField,
@@ -31,6 +32,7 @@ export const textFieldEntity = createEntity({
     flowTypeAttribute,
     validatorAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     const schema = z.string().max(255);
@@ -47,7 +49,11 @@ export const textFieldEntity = createEntity({
       return dv || undefined;
     }
     if (dv && typeof dv === "object" && "value" in dv) {
-      const val = (dv as { value?: unknown }).value;
+      const defaultValue = dv as { isReference?: boolean; value?: unknown };
+      if (defaultValue.isReference) {
+        return undefined;
+      }
+      const val = defaultValue.value;
       if (typeof val === "string") {
         return val || undefined;
       }

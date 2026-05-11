@@ -531,6 +531,26 @@ describe('Form Utilities', () => {
         expect(result).toBe(true);
       });
 
+      it('should return true for GREATER_THAN when field type is expression', () => {
+        // Arrange
+        const field: FormFieldEntity = {
+          type: 'expression',
+          attributes: {
+            name: 'estimated_total',
+            expression: 'function expression() { return 1000; }',
+          },
+        };
+
+        // Act
+        const result = isOperatorCompatibleWithFormField(
+          ComparisonOperator.GREATER_THAN,
+          field,
+        );
+
+        // Assert
+        expect(result).toBe(true);
+      });
+
       it('should return true for EQUAL when field type is date', () => {
         // Arrange
         const field: FormFieldEntity = {
@@ -759,6 +779,26 @@ describe('Form Utilities', () => {
         const field: FormFieldEntity = {
           type: 'currency',
           attributes: { name: 'price' },
+        };
+
+        // Act
+        const result = isOperatorCompatibleWithFormField(
+          ComparisonOperator.CONTAINS,
+          field,
+        );
+
+        // Assert
+        expect(result).toBe(true);
+      });
+
+      it('should return true for CONTAINS when field type is expression', () => {
+        // Arrange
+        const field: FormFieldEntity = {
+          type: 'expression',
+          attributes: {
+            name: 'computed_label',
+            expression: 'function expression() { return "demo"; }',
+          },
         };
 
         // Act

@@ -14,6 +14,7 @@ import { flowTypeAttribute } from "../../attributes/flow-type/definition";
 import { EntityKey } from "@/types/form-builder";
 import { validatorAttribute } from "../../attributes/validator/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const textareaFieldEntity = createEntity({
   name: EntityKey.textareaField,
@@ -29,6 +30,7 @@ export const textareaFieldEntity = createEntity({
     flowTypeAttribute,
     validatorAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     console.debug("textarea validation");

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ import {
   useDeleteRole,
 } from "@/hooks/useRole";
 import { useToast } from "@/components/ui/toast";
-import { Save, MoreHorizontal } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 
 interface RoleDetailPanelProps {
   roleId: string;
@@ -40,8 +40,6 @@ export default function RoleDetailPanel({
   const [code, setCode] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (role) {
@@ -57,22 +55,7 @@ export default function RoleDetailPanel({
     }
   }, [name, code, role?.name, role?.code]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsDropdownOpen(false);
-      }
-    };
-    if (isDropdownOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [isDropdownOpen]);
+  const canDelete = members.length === 0;
 
   const handleSave = async () => {
     if (!role || !hasChanges) return;
@@ -159,38 +142,14 @@ export default function RoleDetailPanel({
             <h2 className="text-lg font-semibold text-gray-900">
               {t("role.details")}
             </h2>
-            <div className="flex items-center gap-2">
-              {/* More menu */}
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="p-2 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100"
-                >
-                  <MoreHorizontal className="h-5 w-5" />
-                </button>
-                {isDropdownOpen && (
-                  <div className="absolute right-0 mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-200 z-10">
-                    <button
-                      onClick={() => {
-                        setIsDropdownOpen(false);
-                        setIsDeleteDialogOpen(true);
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md"
-                    >
-                      {t("role.delete")}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <Button
-                onClick={handleSave}
-                disabled={!hasChanges}
-                loading={updateRoleMutation.isPending}
-                icon={<Save className="h-4 w-4" />}
-              >
-                {t("role.save")}
-              </Button>
-            </div>
+            <Button
+              onClick={handleSave}
+              disabled={!hasChanges}
+              loading={updateRoleMutation.isPending}
+              icon={<Save className="h-4 w-4" />}
+            >
+              {t("role.save")}
+            </Button>
           </div>
 
           <div className="space-y-4">
@@ -235,6 +194,34 @@ export default function RoleDetailPanel({
           roleId={role.id}
           isLoading={isLoading}
         />
+
+        {/* Danger Zone */}
+        <Card className="p-6 border-red-200">
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">
+                {t("role.danger_zone")}
+              </h3>
+              <p className="text-xs text-gray-600 mt-1">
+                {t("role.delete_warning")}
+              </p>
+              {!canDelete && (
+                <p className="text-xs text-amber-600 mt-1 font-medium">
+                  ⚠ {t("role.delete_disabled_hint")}
+                </p>
+              )}
+            </div>
+            <Button
+              variant="destructive"
+              icon={<Trash2 className="h-4 w-4" />}
+              disabled={!canDelete}
+              onClick={() => setIsDeleteDialogOpen(true)}
+              title={!canDelete ? t("role.delete_disabled_hint") : undefined}
+            >
+              {t("role.delete")}
+            </Button>
+          </div>
+        </Card>
       </div>
 
       {/* Delete Confirmation Dialog */}

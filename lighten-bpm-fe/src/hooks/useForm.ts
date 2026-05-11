@@ -102,7 +102,13 @@ export const useCreateForm = (options?: {
     mutationFn: (
       form: Pick<
         FormDefinition,
-        "name" | "description" | "tags" | "validation"
+        | "name"
+        | "description"
+        | "tags"
+        | "validation"
+        | "defaultLang"
+        | "translationLangs"
+        | "labelTranslations"
       >,
     ) => {
       const newForm: Omit<
@@ -116,6 +122,9 @@ export const useCreateForm = (options?: {
         version: 1,
         publishStatus: FormStatus.Draft,
         validation: form.validation,
+        defaultLang: form.defaultLang,
+        translationLangs: form.translationLangs,
+        labelTranslations: form.labelTranslations,
       };
       return formService.create(newForm);
     },

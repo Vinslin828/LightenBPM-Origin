@@ -1,23 +1,30 @@
 import { z } from "zod";
 
+const validationWithLangSchema = z.object({
+  required: z.boolean(),
+  validators: z.array(
+    z.object({
+      key: z.string(),
+      listenFieldIds: z.array(z.string()),
+      code: z.string().optional(),
+      description: z.string().optional(),
+      errorMessage: z.string().optional(),
+      isApi: z.boolean().optional(),
+    }),
+  ),
+  defaultLang: z.string().optional(),
+  translationLangs: z.array(z.string()).optional(),
+  labelTranslations: z
+    .record(z.string(), z.record(z.string(), z.string()))
+    .optional(),
+});
+
 export const createFormRequestSchema = z.object({
   name: z.string(),
   description: z.string(),
   is_template: z.boolean(),
   tags: z.array(z.number()),
-  validation: z.object({
-    required: z.boolean(),
-    validators: z.array(
-      z.object({
-        key: z.string(),
-        listenFieldIds: z.array(z.string()),
-        code: z.string().optional(),
-        description: z.string().optional(),
-        errorMessage: z.string().optional(),
-        isApi: z.boolean().optional(),
-      }),
-    ),
-  }),
+  validation: validationWithLangSchema,
 });
 export type CreateFormRequest = z.infer<typeof createFormRequestSchema>;
 
@@ -46,19 +53,6 @@ export const updateFormRequestSchema = z.object({
   description: z.string(),
   status: z.enum(["DRAFT", "ACTIVE", "SCHEDULED", "ARCHIVED", "RETIRED"]),
   tags: z.array(z.number()),
-  validation: z.object({
-    required: z.boolean(),
-    validators: z.array(
-      z.object({
-        key: z.string(),
-        listenFieldIds: z.array(z.string()),
-        code: z.string().optional(),
-        description: z.string().optional(),
-        errorMessage: z.string().optional(),
-        isApi: z.boolean().optional(),
-      }),
-    ),
-  }), // TODO: awaiting backend
-  // tags: z.array(z.number()),
+  validation: validationWithLangSchema,
 });
 export type UpdateFormRequest = z.infer<typeof updateFormRequestSchema>;

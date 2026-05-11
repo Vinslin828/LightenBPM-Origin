@@ -49,6 +49,9 @@
     "fill_out_form_correctly": "請正確填寫表單。",
     "form_saved_as_draft": "表單已存為草稿",
     "form_saved_as_published": "表單已發布",
+    "save_form_changes_before_translations": "請先儲存表單變更",
+    "save_form_changes_before_translations_desc": "請先修正並儲存目前表單設計中的變更，再儲存翻譯。",
+    "unsaved_form_changes_confirm": "您有尚未儲存的表單變更，確定要離開此頁面嗎？",
     "fix_highlighted_errors_at_component": "請修正 {{component}} 組件的高亮錯誤。",
     "export_success": "您的檔案已成功匯出。",
     "export_failed": "匯出檔案失敗，請重試。",
@@ -74,6 +77,12 @@
     "enter_email": "請輸入您的電子郵件",
     "enter_password": "請輸入您的密碼"
   },
+  "form_list": {
+    "title": "表單管理",
+    "import": "匯入",
+    "new_form": "新增表單",
+    "search_placeholder": "搜尋..."
+  },
   "form_builder": {
     "drag_field_here": "將欄位拖到此處來構建您的表單",
     "form_name": "表單名稱",
@@ -83,6 +92,11 @@
     "type_here": "在此輸入...",
     "duplicate_field_name": "欄位名稱「{{name}}」重複，請使用唯一的欄位名稱。",
     "enter_form_name": "輸入表單名稱",
+    "save_status": {
+      "saved": "已儲存",
+      "unsaved": "尚未儲存",
+      "saving": "儲存中"
+    },
     "entities": {
       "text_field": "輸入框",
       "textarea_field": "文本域",
@@ -113,7 +127,25 @@
       "schema_generation": "結構生成",
       "template": "範本",
       "component": "組件"
-    }
+    },
+    "default_lang": "預設語言",
+    "add_language": "新增語言",
+    "remove_language": "移除語言",
+    "select_language": "選擇語言",
+    "language_editor_default": "預設語言",
+    "language_editor_empty": "請開啟一個表單以開始編輯翻譯。",
+    "language_editor_no_fields": "找不到表單欄位，請先在表單構建器中新增欄位。",
+    "field_name": "欄位",
+    "default": "預設",
+    "copy_all": "複製",
+    "copied": "已複製！",
+    "copy_column": "複製所有標籤至剪貼簿",
+    "paste_all": "批量貼上",
+    "paste_all_title": "貼上 {{lang}} 翻譯",
+    "paste_all_hint": "每行貼上一個翻譯標籤，順序與參考欄位相同。",
+    "paste_reference": "參考（預設語言）",
+    "paste_line_mismatch": "行數不符：預期 {{expected}} 行，實際 {{got}} 行",
+    "saved": "已儲存！"
   },
   "flow": {
     "title": "流程引擎",
@@ -160,7 +192,8 @@
       "select_role": "選擇角色",
       "select_a_role": "選擇一個角色",
       "advanced_settings": "進階設定",
-      "organization_reference_field": "組織引用欄位"
+      "organization_reference_field": "組織引用欄位",
+      "organization_reference_field_helper": "當申請人隸屬多個部門，並在表單中選擇本次申請組織時使用。此表達式需回傳選取的組織 ID 或組織代碼。"
     }
   },
   "dashboard": {
@@ -356,11 +389,14 @@
     "save": "儲存",
     "saved": "角色儲存成功",
     "save_error": "角色儲存失敗",
-    "delete": "刪除",
-    "confirm_delete_title": "刪除",
+    "delete": "刪除角色",
+    "confirm_delete_title": "刪除角色",
     "confirm_delete_message": "刪除後，此角色將無法復原。\n確定要刪除嗎？",
     "delete_success": "角色刪除成功",
     "delete_error": "角色刪除失敗",
+    "danger_zone": "危險區域",
+    "delete_warning": "永久刪除此角色，此操作無法復原。",
+    "delete_disabled_hint": "請先移除所有成員，再刪除此角色。",
     "select_to_view": "選擇一個角色以檢視詳情",
     "no_role": "暫無角色",
     "empty_hint": "點擊此處開始建立。",

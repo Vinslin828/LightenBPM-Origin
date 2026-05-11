@@ -13,6 +13,7 @@ import { enableMultipleAttribute } from "../../attributes/enable-multiple/defini
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const fileUploadFieldEntity = createEntity({
   name: EntityKey.buttonUpload,
@@ -28,6 +29,7 @@ export const fileUploadFieldEntity = createEntity({
     disabledAttribute,
     readonlyAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     /**

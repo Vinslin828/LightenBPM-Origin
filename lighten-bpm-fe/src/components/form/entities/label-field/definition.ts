@@ -9,6 +9,7 @@ import { requiredAttribute } from "../../attributes/required/definition";
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const labelFieldEntity = createEntity({
   name: EntityKey.labelField,
@@ -21,6 +22,7 @@ export const labelFieldEntity = createEntity({
     disabledAttribute,
     readonlyAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value) {
     // Label is decorative and does not store a value

@@ -5,6 +5,7 @@ import { DisabledAttribute } from "./disabled/component";
 import { HideAttribute } from "./hide/component";
 import { ReadonlyAttribute } from "./readonly/component";
 import { RequiredAttribute } from "./required/component";
+import { DynamicStatusAttribute } from "./dynamic-status/component";
 
 type Props = { type: EntityKey };
 export default function VisibilityAttributes(props: Props) {
@@ -23,6 +24,7 @@ export default function VisibilityAttributes(props: Props) {
       {visibilityOptions.includes(VisibilityAction.DISABLED) && (
         <DisabledAttribute />
       )}
+      <DynamicStatusAttribute />
     </>
   );
 }

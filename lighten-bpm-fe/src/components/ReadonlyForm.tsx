@@ -6,11 +6,14 @@ import {
   InterpreterEntities,
   useInterpreterStore,
 } from "@coltorapps/builder-react";
-import { entitiesComponents } from "@/const/form-builder";
 import { basicFormBuilder } from "./form/builder/definition";
 import { usePreloadMasterDataForExpressions } from "@/hooks/useMasterData";
 import { useSetAtom } from "jotai";
 import { runtimeApplicationAtom } from "@/store";
+import {
+  createVisibleEntityComponents,
+  getHiddenEntityIds,
+} from "@/utils/form-visibility";
 
 export default function ReadonlyForm({ formInstance, ...props }: Application) {
   const { form, data } = formInstance;
@@ -31,13 +34,12 @@ export default function ReadonlyForm({ formInstance, ...props }: Application) {
         const attributes = current.attributes ?? {};
         const shouldForceReadonly =
           "readonly" in attributes || current.type === EntityKey.grid;
-        const nextAttributes =
-          shouldForceReadonly
-            ? {
-                ...attributes,
-                readonly: true,
-              }
-            : attributes;
+        const nextAttributes = shouldForceReadonly
+          ? {
+              ...attributes,
+              readonly: true,
+            }
+          : attributes;
 
         return [
           entityId,
@@ -57,7 +59,18 @@ export default function ReadonlyForm({ formInstance, ...props }: Application) {
 
   usePreloadMasterDataForExpressions(readonlySchema);
 
-  const interpreterStore = useInterpreterStore(basicFormBuilder, readonlySchema);
+  const interpreterStore = useInterpreterStore(
+    basicFormBuilder,
+    readonlySchema,
+  );
+  const hiddenEntityIds = useMemo(
+    () => getHiddenEntityIds(readonlySchema),
+    [readonlySchema],
+  );
+  const renderableEntityComponents = useMemo(
+    () => createVisibleEntityComponents(hiddenEntityIds),
+    [hiddenEntityIds],
+  );
 
   useEffect(() => {
     interpreterStore.setData({
@@ -77,7 +90,7 @@ export default function ReadonlyForm({ formInstance, ...props }: Application) {
     <dl className="flex flex-col gap-6">
       <InterpreterEntities
         interpreterStore={interpreterStore}
-        components={entitiesComponents}
+        components={renderableEntityComponents}
       />
     </dl>
   );

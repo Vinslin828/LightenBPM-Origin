@@ -13,7 +13,11 @@ import {
 } from './dto/create-dataset.dto';
 import { ApiConfigDto } from './dto/api-config.dto';
 import { DatasetFieldMappingsDto } from './dto/field-mapping.dto';
-import { SYSTEM_DATASETS } from './constants';
+import {
+  SYSTEM_DATASET_ORG_UNIT_TRANSLATIONS,
+  SYSTEM_DATASETS,
+  isEditableSystemDataset,
+} from './constants';
 import { MasterDataExternalApiService } from './master-data-external-api.service';
 
 interface InternalDatasetDefinition {
@@ -83,7 +87,7 @@ export class MasterDataRecordService {
     code: string,
     data: Record<string, unknown> | Record<string, unknown>[],
   ) {
-    if (SYSTEM_DATASETS[code]) {
+    if (SYSTEM_DATASETS[code] && !isEditableSystemDataset(code)) {
       throw new ForbiddenException(`System dataset "${code}" is read-only.`);
     }
     const definition = await this.getDefinition(code);
@@ -110,7 +114,9 @@ export class MasterDataRecordService {
     }
 
     // Apply field defaults then validate; incoming values override defaults
-    const records = rawRecords.map((r) => ({ ...defaultsMap, ...r }));
+    const records = rawRecords.map((r) =>
+      this.prepareRecordForInsert(code, { ...defaultsMap, ...r }),
+    );
 
     // Validate all records first
     records.forEach((record) => {
@@ -123,15 +129,21 @@ export class MasterDataRecordService {
     if (records.length === 1) {
       const record = records[0];
       const dataKeys = Object.keys(record);
-      const columns = dataKeys.map((key) =>
+      const insertKeys =
+        code === SYSTEM_DATASET_ORG_UNIT_TRANSLATIONS
+          ? [...dataKeys, 'updated_at']
+          : dataKeys;
+      const columns = insertKeys.map((key) =>
         MasterDataUtils.quoteIdentifier(key),
       );
-      const placeholders = dataKeys.map((_, i) => `$${i + 1}`);
-      const values = dataKeys.map((key) =>
-        MasterDataUtils.parseFieldValue(
-          record[key],
-          fieldTypeMap.get(key) as FieldType,
-        ),
+      const placeholders = insertKeys.map((_, i) => `$${i + 1}`);
+      const values = insertKeys.map((key) =>
+        key === 'updated_at'
+          ? new Date()
+          : MasterDataUtils.parseFieldValue(
+              record[key],
+              fieldTypeMap.get(key) as FieldType,
+            ),
       );
 
       const sql = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *;`;
@@ -145,7 +157,11 @@ export class MasterDataRecordService {
     // We assume all records have the same keys for simplicity in this DML generation
     // If not, we take the union of all keys or reject (here we reject if keys differ from first record for consistency)
     const firstRecordKeys = Object.keys(records[0]);
-    const columns = firstRecordKeys.map((key) =>
+    const insertKeys =
+      code === SYSTEM_DATASET_ORG_UNIT_TRANSLATIONS
+        ? [...firstRecordKeys, 'updated_at']
+        : firstRecordKeys;
+    const columns = insertKeys.map((key) =>
       MasterDataUtils.quoteIdentifier(key),
     );
 
@@ -163,12 +179,14 @@ export class MasterDataRecordService {
         );
       }
 
-      const rowPlaceholders = firstRecordKeys.map((key) => {
+      const rowPlaceholders = insertKeys.map((key) => {
         values.push(
-          MasterDataUtils.parseFieldValue(
-            record[key],
-            fieldTypeMap.get(key) as FieldType,
-          ),
+          key === 'updated_at'
+            ? new Date()
+            : MasterDataUtils.parseFieldValue(
+                record[key],
+                fieldTypeMap.get(key) as FieldType,
+              ),
         );
         return `$${values.length}`;
       });
@@ -202,6 +220,34 @@ export class MasterDataRecordService {
         );
       }
     });
+  }
+
+  private prepareRecordForInsert(
+    code: string,
+    record: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (code !== SYSTEM_DATASET_ORG_UNIT_TRANSLATIONS) {
+      return record;
+    }
+    const sanitized = { ...record };
+    delete sanitized.id;
+    delete sanitized.created_at;
+    delete sanitized.updated_at;
+    return sanitized;
+  }
+
+  private sanitizeUpdateData(
+    code: string,
+    data: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (code !== SYSTEM_DATASET_ORG_UNIT_TRANSLATIONS) {
+      return data;
+    }
+    const sanitized = { ...data };
+    delete sanitized.id;
+    delete sanitized.created_at;
+    delete sanitized.updated_at;
+    return sanitized;
   }
 
   async findRecords(
@@ -340,7 +386,7 @@ export class MasterDataRecordService {
     filter: Record<string, unknown>,
     data: Record<string, unknown>,
   ) {
-    if (SYSTEM_DATASETS[code]) {
+    if (SYSTEM_DATASETS[code] && !isEditableSystemDataset(code)) {
       throw new ForbiddenException(`System dataset "${code}" is read-only.`);
     }
     const definition = await this.getDefinition(code);
@@ -349,6 +395,7 @@ export class MasterDataRecordService {
         `External API dataset "${code}" is read-only.`,
       );
     }
+    data = this.sanitizeUpdateData(code, data);
     const fields = definition.fields;
     const allowedFields = fields.map((f) => f.name);
     const fieldTypeMap = new Map(fields.map((f) => [f.name, f.type]));
@@ -378,6 +425,12 @@ export class MasterDataRecordService {
         ),
       );
     });
+
+    if (code === SYSTEM_DATASET_ORG_UNIT_TRANSLATIONS) {
+      setClauses.push(
+        `${MasterDataUtils.quoteIdentifier('updated_at')} = CURRENT_TIMESTAMP`,
+      );
+    }
 
     const whereClauses: string[] = [];
     Object.keys(filter).forEach((key) => {
@@ -444,7 +497,7 @@ export class MasterDataRecordService {
     code: string,
     fileBuffer: Buffer,
   ): Promise<{ inserted: number }> {
-    if (SYSTEM_DATASETS[code]) {
+    if (SYSTEM_DATASETS[code] && !isEditableSystemDataset(code)) {
       throw new ForbiddenException(`System dataset "${code}" is read-only.`);
     }
     const definition = await this.getDefinition(code);
@@ -461,7 +514,9 @@ export class MasterDataRecordService {
     const allowedFields = fields.map((f) => f.name);
     const fieldTypeMap = new Map(fields.map((f) => [f.name, f.type]));
 
-    const insertHeaders = headers.filter((h) => h !== 'id');
+    const insertHeaders = headers.filter(
+      (h) => !['id', 'created_at', 'updated_at'].includes(h),
+    );
     for (const h of insertHeaders) {
       if (!allowedFields.includes(h)) {
         throw new BadRequestException(
@@ -474,19 +529,25 @@ export class MasterDataRecordService {
     }
 
     const tableName = MasterDataUtils.getFullTableName(definition.table_name);
-    const columns = insertHeaders.map((h) =>
+    const csvInsertHeaders =
+      code === SYSTEM_DATASET_ORG_UNIT_TRANSLATIONS
+        ? [...insertHeaders, 'updated_at']
+        : insertHeaders;
+    const columns = csvInsertHeaders.map((h) =>
       MasterDataUtils.quoteIdentifier(h),
     );
     const values: (number | boolean | Date | string | null)[] = [];
     const valuePlaceholders: string[] = [];
 
     for (const row of rows) {
-      const rowPlaceholders = insertHeaders.map((h) => {
+      const rowPlaceholders = csvInsertHeaders.map((h) => {
         values.push(
-          MasterDataUtils.parseFieldValue(
-            row[h],
-            fieldTypeMap.get(h) as FieldType,
-          ),
+          h === 'updated_at'
+            ? new Date()
+            : MasterDataUtils.parseFieldValue(
+                row[h],
+                fieldTypeMap.get(h) as FieldType,
+              ),
         );
         return `$${values.length}`;
       });
@@ -519,7 +580,7 @@ export class MasterDataRecordService {
   }
 
   async deleteRecords(code: string, filter: Record<string, unknown>) {
-    if (SYSTEM_DATASETS[code]) {
+    if (SYSTEM_DATASETS[code] && !isEditableSystemDataset(code)) {
       throw new ForbiddenException(`System dataset "${code}" is read-only.`);
     }
     const definition = await this.getDefinition(code);

@@ -15,6 +15,7 @@ import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { validatorAttribute } from "../../attributes/validator/definition";
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const radioButtonEntity = createEntity({
   name: EntityKey.radioButton,
@@ -31,6 +32,7 @@ export const radioButtonEntity = createEntity({
     validatorAttribute,
     disabledAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     const optionValues =

@@ -8,6 +8,7 @@ import { disabledAttribute } from "../../attributes/disabled/definition";
 import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { requiredAttribute } from "../../attributes/required/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const separatorFieldEntity = createEntity({
   name: EntityKey.separatorField,
@@ -19,6 +20,7 @@ export const separatorFieldEntity = createEntity({
     disabledAttribute,
     readonlyAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value) {
     // Separator is decorative and does not store a value

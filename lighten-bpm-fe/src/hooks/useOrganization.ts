@@ -5,6 +5,9 @@ import { TYPES } from "@/types/symbols";
 import { Unit, User } from "@/types/domain";
 import { OrgHead, OrgUnitWithHeads } from "@/types/organization";
 import { getActiveHead } from "@/schemas/organization/head-transform";
+import { useTranslation } from "react-i18next";
+import { localizeOrgUnit, localizeOrgUnits } from "@/utils/localized-org-unit";
+import { useMemo } from "react";
 
 const getDomainService = () =>
   container.get<IDomainService>(TYPES.DomainService);
@@ -26,6 +29,7 @@ const QUERY_KEYS = {
  * Reuses existing useMasterData pattern
  */
 export const useOrgUnits = () => {
+  const { i18n } = useTranslation();
   const {
     data: { data: units = [] } = {},
     isLoading,
@@ -41,11 +45,16 @@ export const useOrgUnits = () => {
     },
   });
 
+  const localizedUnits = useMemo(
+    () => localizeOrgUnits(units, i18n.language),
+    [units, i18n.language],
+  );
+
   if (error) {
     console.error("[useOrgUnits] Error fetching org units:", error);
   }
 
-  return { units, isLoading, error, refetch };
+  return { units: localizedUnits, isLoading, error, refetch };
 };
 
 /**
@@ -53,6 +62,7 @@ export const useOrgUnits = () => {
  * Combines org unit data with heads data and computes active head
  */
 export const useOrgUnitWithHeads = (id?: string) => {
+  const { i18n } = useTranslation();
   // Fetch org unit details
   const {
     data: { data: unit } = {},
@@ -194,9 +204,11 @@ export const useOrgUnitWithHeads = (id?: string) => {
   })();
 
   // Combine unit with heads and compute active head
-  const orgUnitWithHeads: OrgUnitWithHeads | undefined = unit
+  const localizedUnit = unit ? localizeOrgUnit(unit, i18n.language) : undefined;
+
+  const orgUnitWithHeads: OrgUnitWithHeads | undefined = localizedUnit
     ? {
-        ...unit,
+        ...localizedUnit,
         members,
         heads,
         activeHead: getActiveHead(heads),
@@ -219,7 +231,7 @@ export const useOrgUnitWithHeads = (id?: string) => {
 
   return {
     orgUnit: orgUnitWithHeads,
-    unit,
+    unit: localizedUnit,
     heads,
     activeHead: orgUnitWithHeads?.activeHead,
     isLoading: isLoadingUnit || isLoadingHeads || isLoadingMembers,
@@ -234,7 +246,12 @@ export const useCreateOrgUnit = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: { code: string; name: string; parentCode?: string }) =>
+    mutationFn: (data: {
+      code: string;
+      name: string;
+      nameTranslations?: Record<string, string>;
+      parentCode?: string;
+    }) =>
       getDomainService().createOrgUnit(data),
     onSuccess: () => {
       // Invalidate all organization-related queries
@@ -258,7 +275,12 @@ export const useUpdateOrgUnit = () => {
       data,
     }: {
       orgUnitId: string;
-      data: { name?: string; code?: string; parentCode?: string | null };
+      data: {
+        name?: string;
+        code?: string;
+        nameTranslations?: Record<string, string>;
+        parentCode?: string | null;
+      };
     }) => getDomainService().updateOrgUnit(orgUnitId, data),
     onSuccess: (response, variables) => {
       // Invalidate queries to refetch updated data
@@ -327,13 +349,16 @@ export const useSetUserDefaultOrg = () => {
  */
 export const useUsers = () => {
   const {
-    data: { data: users = [] } = {},
+    data,
     isLoading,
     error,
   } = useQuery({
     queryKey: QUERY_KEYS.users,
     queryFn: () => getDomainService().getUsers(),
   });
+
+  // getUsers() returns PaginatedApiResponse, so data.data is { items, total, ... }
+  const users: import("@/types/domain").User[] = data?.data?.items ?? [];
 
   return { users, isLoading, error };
 };

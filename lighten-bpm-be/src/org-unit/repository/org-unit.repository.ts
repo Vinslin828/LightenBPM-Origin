@@ -29,11 +29,91 @@ const memberUserInclude = {
   default_org_preference: { include: { org_unit: true } },
 } as const;
 
+const SUPPORTED_ORG_UNIT_TRANSLATION_LANGS = ['en', 'zh-TW', 'zh-CN'] as const;
+
+const sanitizeNameTranslations = (
+  translations?: Record<string, string>,
+): Record<string, string> =>
+  Object.entries(translations ?? {}).reduce<Record<string, string>>(
+    (acc, [lang, name]) => {
+      const normalizedLang = lang.trim();
+      const normalizedName = name.trim();
+      if (normalizedLang && normalizedName) {
+        acc[normalizedLang] = normalizedName;
+      }
+      return acc;
+    },
+    {},
+  );
+
+const completeNameTranslations = (
+  translations: Record<string, string>,
+  fallbackName: string,
+): Record<string, string> => {
+  const completed = { ...translations };
+  const normalizedFallbackName = fallbackName.trim();
+
+  for (const lang of SUPPORTED_ORG_UNIT_TRANSLATION_LANGS) {
+    if (!completed[lang] && normalizedFallbackName) {
+      completed[lang] = normalizedFallbackName;
+    }
+  }
+
+  return completed;
+};
+
 @Injectable()
 export class OrgUnitRepository {
   private readonly logger = new Logger(OrgUnitRepository.name);
 
   constructor(public readonly prisma: PrismaService) {}
+
+  private getOrgUnitInclude(now: Date) {
+    return {
+      translations: true,
+      members: {
+        where: {
+          end_date: { gt: now },
+        },
+        include: {
+          user: {
+            include: {
+              ...memberUserInclude,
+            },
+          },
+        },
+      },
+      children: { include: { translations: true } },
+      parent: { include: { translations: true } },
+    } as any;
+  }
+
+  private async replaceOrgUnitTranslations(
+    client: PrismaTransactionClient | PrismaService,
+    orgUnitId: number,
+    translations?: Record<string, string>,
+    fallbackName?: string,
+  ) {
+    if (translations === undefined) return;
+
+    const sanitized = completeNameTranslations(
+      sanitizeNameTranslations(translations),
+      fallbackName ?? '',
+    );
+    await (client as any).orgUnitTranslation.deleteMany({
+      where: { org_unit_id: orgUnitId },
+    });
+
+    if (Object.keys(sanitized).length === 0) return;
+
+    await (client as any).orgUnitTranslation.createMany({
+      data: Object.entries(sanitized).map(([lang, name]) => ({
+        org_unit_id: orgUnitId,
+        lang,
+        name,
+      })),
+    });
+  }
 
   async createOrgUnit(
     createOrgUnitDto: CreateOrgUnitDto,
@@ -55,7 +135,7 @@ export class OrgUnitRepository {
         parent_id = parent.id;
       }
 
-      return await client.orgUnit.create({
+      const orgUnit = await client.orgUnit.create({
         data: {
           code: createOrgUnitDto.code,
           name: createOrgUnitDto.name,
@@ -65,6 +145,13 @@ export class OrgUnitRepository {
           updated_by: creatorId,
         },
       });
+      await this.replaceOrgUnitTranslations(
+        client,
+        orgUnit.id,
+        createOrgUnitDto.nameTranslations ?? {},
+        createOrgUnitDto.name,
+      );
+      return orgUnit;
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError) {
         if (e.code == 'P2003') {
@@ -108,44 +195,14 @@ export class OrgUnitRepository {
 
     return this.prisma.orgUnit.findMany({
       where,
-      include: {
-        members: {
-          where: {
-            end_date: { gt: now },
-          },
-          include: {
-            user: {
-              include: {
-                ...memberUserInclude,
-              },
-            },
-          },
-        },
-        children: true,
-        parent: true,
-      },
+      include: this.getOrgUnitInclude(now),
     });
   }
   async findOrgUnitById(id: number): Promise<OrgUnitWithRelations | null> {
     const now = new Date();
     return this.prisma.orgUnit.findFirst({
       where: { id, deleted_at: null },
-      include: {
-        members: {
-          where: {
-            end_date: { gt: now },
-          },
-          include: {
-            user: {
-              include: {
-                ...memberUserInclude,
-              },
-            },
-          },
-        },
-        children: true,
-        parent: true,
-      },
+      include: this.getOrgUnitInclude(now),
     });
   }
 
@@ -157,22 +214,7 @@ export class OrgUnitRepository {
     const now = new Date();
     return client.orgUnit.findFirst({
       where: { code, deleted_at: null },
-      include: {
-        members: {
-          where: {
-            end_date: { gt: now },
-          },
-          include: {
-            user: {
-              include: {
-                ...memberUserInclude,
-              },
-            },
-          },
-        },
-        children: true,
-        parent: true,
-      },
+      include: this.getOrgUnitInclude(now),
     });
   }
 
@@ -184,20 +226,7 @@ export class OrgUnitRepository {
     const now = new Date();
     return client.orgUnit.findFirst({
       where: { id },
-      include: {
-        members: {
-          where: { end_date: { gt: now } },
-          include: {
-            user: {
-              include: {
-                ...memberUserInclude,
-              },
-            },
-          },
-        },
-        children: true,
-        parent: true,
-      },
+      include: this.getOrgUnitInclude(now),
     });
   }
 
@@ -209,22 +238,7 @@ export class OrgUnitRepository {
     const now = new Date();
     return client.orgUnit.findFirst({
       where: { code },
-      include: {
-        members: {
-          where: {
-            end_date: { gt: now },
-          },
-          include: {
-            user: {
-              include: {
-                ...memberUserInclude,
-              },
-            },
-          },
-        },
-        children: true,
-        parent: true,
-      },
+      include: this.getOrgUnitInclude(now),
     });
   }
 
@@ -262,7 +276,7 @@ export class OrgUnitRepository {
       }
     }
 
-    return client.orgUnit.update({
+    const orgUnit = await client.orgUnit.update({
       where: { id },
       data: {
         code: updateOrgUnitDto.code,
@@ -271,6 +285,13 @@ export class OrgUnitRepository {
         parent_id,
       },
     });
+    await this.replaceOrgUnitTranslations(
+      client,
+      orgUnit.id,
+      updateOrgUnitDto.nameTranslations,
+      orgUnit.name,
+    );
+    return orgUnit;
   }
 
   async deleteOrgUnit(
@@ -318,7 +339,7 @@ export class OrgUnitRepository {
       }
     }
 
-    return this.prisma.orgUnit.update({
+    const orgUnit = await this.prisma.orgUnit.update({
       where: { code },
       data: {
         code: updateOrgUnitDto.code,
@@ -327,6 +348,13 @@ export class OrgUnitRepository {
         parent_id,
       },
     });
+    await this.replaceOrgUnitTranslations(
+      this.prisma,
+      orgUnit.id,
+      updateOrgUnitDto.nameTranslations,
+      orgUnit.name,
+    );
+    return orgUnit;
   }
 
   async deleteOrgUnitByCode(

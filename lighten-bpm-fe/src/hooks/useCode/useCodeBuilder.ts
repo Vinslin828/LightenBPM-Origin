@@ -2,10 +2,7 @@ import { builderStoreAtom, interpreterStoreAtom } from "@/store";
 import { FormSchema } from "@/types/domain";
 import { useAtom } from "jotai";
 import { useMemo } from "react";
-import {
-  ValidationReturnType,
-  CodeValidationContext,
-} from "./types";
+import { ValidationReturnType, CodeValidationContext } from "./types";
 import {
   executeCodeWithBindings,
   extractReferencedFieldNames,
@@ -70,6 +67,7 @@ export function useCodeBuilder(options?: Options) {
       email: "",
       jobGrade: 0,
       defaultOrgId: "",
+      defaultOrgName: "",
     });
     const mockGetApplication = () => ({
       serialNumber: "",
@@ -134,10 +132,7 @@ export function useCodeBuilder(options?: Options) {
     }
   }
 
-  function checkReturnValue(
-    code: string,
-    options?: ValidationOptions,
-  ) {
+  function checkReturnValue(code: string, options?: ValidationOptions) {
     try {
       const execute = executeCodeFunction(code);
       const output = execute(options?.context?.value, options?.context);
@@ -147,7 +142,10 @@ export function useCodeBuilder(options?: Options) {
         return;
       }
 
-      if (allowedReturnTypes.includes("boolean") && typeof output === "boolean") {
+      if (
+        allowedReturnTypes.includes("boolean") &&
+        typeof output === "boolean"
+      ) {
         return;
       }
 
@@ -184,7 +182,10 @@ export function useCodeBuilder(options?: Options) {
     try {
       checkFieldNames(code);
 
-      checkJsSyntax(`function() { return ${code};}`);
+      const result = executeCode(code);
+      if (typeof result === "function") {
+        result();
+      }
       return {
         isValid: true,
         errors: [],

@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Application, ReviewStatus } from "@/types/application";
 import {
   InterpreterEntities,
   useInterpreterStore,
 } from "@coltorapps/builder-react";
-import { entitiesComponents } from "@/const/form-builder";
 import { basicFormBuilder } from "./form/builder/definition";
 import { usePreloadMasterDataForExpressions } from "@/hooks/useMasterData";
 import { useSetAtom } from "jotai";
@@ -20,10 +19,18 @@ import {
   useRejectApplication,
 } from "@/hooks/useApplication";
 import { useToast } from "@ui/toast";
-import { ZodError } from "zod";
 import { useTranslation } from "react-i18next";
 import useValidatorStore from "@/hooks/useValidatorStore";
 import { parseFormData } from "@/utils/parser";
+import {
+  createVisibleEntityComponents,
+  getHiddenEntityIds,
+} from "@/utils/form-visibility";
+import { useCodeHelper } from "@/hooks/useCode/useCodeHelper";
+import {
+  buildZodErrors,
+  getDynamicRequiredErrors,
+} from "@/utils/dynamic-status-validation";
 type Props = Application & {
   onChange?: (values?: EntitiesValues<typeof basicFormBuilder>) => void;
 };
@@ -46,6 +53,19 @@ export default function ApproverForm({
   const interpreterStore = useInterpreterStore(basicFormBuilder, form.schema, {
     initialData: data ?? {},
   });
+  const { executeCode } = useCodeHelper({
+    formSchema: form.schema,
+    formData: data ?? {},
+    application: { ...props, formInstance },
+  });
+  const hiddenEntityIds = useMemo(
+    () => getHiddenEntityIds(form.schema),
+    [form.schema],
+  );
+  const renderableEntityComponents = useMemo(
+    () => createVisibleEntityComponents(hiddenEntityIds),
+    [hiddenEntityIds],
+  );
   const { toast } = useToast();
   const { mutate: approveApplication, isPending: isApproving } =
     useApproveApplication({
@@ -86,27 +106,24 @@ export default function ApproverForm({
       );
       const localErrors = await executeAllLocalValidator(data.entitiesValues);
       const formErrors = await executeFormValidator();
+      const dynamicRequiredErrors = getDynamicRequiredErrors({
+        schema: interpreterStore.schema,
+        values: data.entitiesValues,
+        executeCode,
+      });
 
       console.debug({ localErrors });
 
       const mergedErrors: Record<string, string> = {
         ...localErrors,
         ...registryErrors,
+        ...dynamicRequiredErrors,
       };
       const hasEntityErrors = Object.keys(mergedErrors).length > 0;
       const hasFormErrors = Object.keys(formErrors).length > 0;
 
       if (hasEntityErrors) {
-        const entitiesErrors = Object.entries(mergedErrors).reduce(
-          (acc, [entityId, message]) => {
-            acc[entityId] = new ZodError([
-              { code: "custom", message, path: [] },
-            ]);
-            return acc;
-          },
-          {} as Record<string, ZodError>,
-        );
-        interpreterStore.setEntitiesErrors(entitiesErrors);
+        interpreterStore.setEntitiesErrors(buildZodErrors(mergedErrors));
       }
 
       if (hasFormErrors) {
@@ -195,7 +212,7 @@ export default function ApproverForm({
       >
         <InterpreterEntities
           interpreterStore={interpreterStore}
-          components={entitiesComponents}
+          components={renderableEntityComponents}
         />
 
         <div className="flex flex-col py-4 gap-3">

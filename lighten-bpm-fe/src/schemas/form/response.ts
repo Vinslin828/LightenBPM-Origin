@@ -44,6 +44,12 @@ export const formRevisionSchema = z.object({
           isApi: z.boolean().optional(),
         }),
       ),
+      // Multi-language label fields — stored alongside validation in fe_validation
+      defaultLang: z.string().optional(),
+      translationLangs: z.array(z.string()).optional(),
+      labelTranslations: z
+        .record(z.string(), z.record(z.string(), z.string()))
+        .optional(),
     })
     .nullable(),
   version: z.number(),

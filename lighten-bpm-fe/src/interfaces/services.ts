@@ -178,12 +178,18 @@ export interface IDomainService {
   createOrgUnit(data: {
     code: string;
     name: string;
+    nameTranslations?: Record<string, string>;
     parentCode?: string;
   }): Promise<ApiResponse<Unit>>;
   createRole(data: { code: string; name: string }): Promise<ApiResponse<Unit>>;
   updateOrgUnit(
     orgUnitId: string,
-    data: { name?: string; code?: string; parentCode?: string | null },
+    data: {
+      name?: string;
+      code?: string;
+      nameTranslations?: Record<string, string>;
+      parentCode?: string | null;
+    },
   ): Promise<ApiResponse<Unit>>;
   deleteOrgUnit(orgUnitId: string): Promise<ApiResponse<void>>;
   updateUserDefaultOrg(

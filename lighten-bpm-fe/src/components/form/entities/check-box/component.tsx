@@ -8,6 +8,15 @@ import { createEntityComponent } from "@coltorapps/builder-react";
 import { checkboxFieldEntity } from "./definition";
 import { useId } from "react";
 import { useFieldValidationState } from "@/hooks/useFieldValidationState";
+import {
+  getEntityTranslationKey,
+  getOptionTranslationKey,
+  resolveEntityLabel,
+  useEntityLabel,
+} from "@/hooks/useEntityLabel";
+import { useAtomValue } from "jotai";
+import { formSettingAtom } from "@/store";
+import { useTranslation } from "react-i18next";
 
 export const CheckboxFieldEntity = createEntityComponent(
   checkboxFieldEntity,
@@ -76,6 +85,17 @@ export const CheckboxFieldEntity = createEntityComponent(
     const isRequired = props.entity.attributes.required;
     const { localError, isValidating, validateAndCommit } =
       useFieldValidationState(props.entity.id);
+    const { defaultLang, labelTranslations } = useAtomValue(formSettingAtom);
+    const { i18n } = useTranslation();
+    const entityTranslationKey = getEntityTranslationKey(
+      props.entity.id,
+      props.entity.attributes,
+    );
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      entityTranslationKey,
+    );
 
     const handleValidation = async (nextValues: string[]) => {
       await validateAndCommit({
@@ -92,7 +112,10 @@ export const CheckboxFieldEntity = createEntityComponent(
       optionValue: string,
       checked: boolean,
     ) => {
-      if (props.entity.attributes.readonly || props.entity.attributes.disabled) {
+      if (
+        props.entity.attributes.readonly ||
+        props.entity.attributes.disabled
+      ) {
         return;
       }
 
@@ -117,15 +140,21 @@ export const CheckboxFieldEntity = createEntityComponent(
           className="text-sm font-medium mb-2 block"
           aria-required={props.entity.attributes.required}
         >
-          {!!props.entity.attributes.label.value
-            ? props.entity.attributes.label.value
-            : props.entity.attributes.name}
+          {label}
         </Label>
         <div className="space-y-4">
           {options.length > 0 ? (
             options.map((option, index) => {
               const checkboxId = `${baseId}-${index}`;
               const isChecked = effectiveValues?.includes(option.value);
+              const optionLabel = resolveEntityLabel(
+                getOptionTranslationKey(props.entity.id, option.value),
+                option.label,
+                labelTranslations,
+                defaultLang,
+                i18n.language,
+                [getOptionTranslationKey(entityTranslationKey, option.value)],
+              );
 
               return (
                 <div key={option.value} className="flex items-center space-x-2">
@@ -149,7 +178,7 @@ export const CheckboxFieldEntity = createEntityComponent(
                     htmlFor={checkboxId}
                     className="text-sm font-normal cursor-pointer"
                   >
-                    {option.label}
+                    {optionLabel}
                   </label>
                 </div>
               );

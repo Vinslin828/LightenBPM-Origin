@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { SingleSelect } from "@ui/select/single-select";
 import { Input } from "@/components/ui/input";
-import {  useFlowBuilder } from "@/hooks/useFlowBuilder";
+import { useFlowBuilder } from "@/hooks/useFlowBuilder";
 import { useEffect, useMemo } from "react";
 import { DeleteIcon, PlusIcon } from "@/components/icons";
 import { ChevronDown } from "lucide-react";
@@ -30,11 +30,18 @@ const getOperatorOptionsByType = (type?: EntityKey) => {
   if (type === EntityKey.numberField || type === EntityKey.datePickerField) {
     return numberOperatorOptions;
   }
+  if (type === EntityKey.expressionField) {
+    return [...numberOperatorOptions, ...stringOperatorOptions];
+  }
   if (type === EntityKey.textField || type === EntityKey.textareaField) {
     return stringOperatorOptions;
   }
   return stringOperatorOptions;
 };
+
+const numberOperators = new Set<Operator>(
+  numberOperatorOptions.map((option) => option.value),
+);
 
 type ConditionProps = {
   initialData?: ConditionBranch[];
@@ -395,7 +402,11 @@ function UiExpressionComponent({
       );
     }
 
-    if (selectedField?.type === EntityKey.numberField) {
+    if (
+      selectedField?.type === EntityKey.numberField ||
+      (selectedField?.type === EntityKey.expressionField &&
+        numberOperators.has(value.operator))
+    ) {
       return (
         <Input
           type="number"

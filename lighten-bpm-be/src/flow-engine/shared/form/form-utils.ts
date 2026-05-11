@@ -146,6 +146,17 @@ export function isOperatorCompatibleWithFormField(
     );
   }
 
+  // Expression components can return different runtime value shapes depending
+  // on their code. The condition executor already evaluates numeric operators
+  // by coercing both sides with Number(...), so design-time validation should
+  // allow both numeric and string operators here.
+  if (field.type === FORM_FIELD_TYPES.EXPRESSION) {
+    return (
+      NUMERIC_OPERATORS.includes(operator) ||
+      STRING_OPERATORS.includes(operator)
+    );
+  }
+
   // Numeric operators work with numeric and date fields (date is stored as Unix timestamp)
   if (NUMERIC_OPERATORS.includes(operator)) {
     return (

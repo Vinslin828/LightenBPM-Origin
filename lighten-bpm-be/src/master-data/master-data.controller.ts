@@ -35,6 +35,8 @@ import {
 } from './master-data-schema.service';
 import { MasterDataRecordService } from './master-data-record.service';
 import { MasterDataExternalApiService } from './master-data-external-api.service';
+import { MasterDataMembershipService } from './master-data-membership.service';
+import { SYSTEM_DATASET_ORG_MEMBERSHIPS } from './constants';
 import { CreateDatasetDto } from './dto/create-dataset.dto';
 import { ImportDefinitionDto } from './dto/import-dataset.dto';
 import { TestExternalApiDto } from './dto/test-external-api.dto';
@@ -65,6 +67,7 @@ export class MasterDataController {
     private readonly schemaService: MasterDataSchemaService,
     private readonly recordService: MasterDataRecordService,
     private readonly externalApiService: MasterDataExternalApiService,
+    private readonly membershipService: MasterDataMembershipService,
   ) {}
 
   private mapDefinition(
@@ -311,7 +314,10 @@ export class MasterDataController {
     content: { 'text/csv': {} },
   })
   async exportRecordsCsv(@Param('code') code: string): Promise<StreamableFile> {
-    const { fields, rows } = await this.recordService.exportAllRecords(code);
+    const { fields, rows } =
+      code === SYSTEM_DATASET_ORG_MEMBERSHIPS
+        ? await this.membershipService.exportAllRecords()
+        : await this.recordService.exportAllRecords(code);
     const csv = MasterDataUtils.recordsToCsv(fields, rows);
     return new StreamableFile(Buffer.from(csv, 'utf-8'), {
       type: 'text/csv',
@@ -357,6 +363,9 @@ export class MasterDataController {
     if (!file) {
       throw new BadRequestException('No file uploaded.');
     }
+    if (code === SYSTEM_DATASET_ORG_MEMBERSHIPS) {
+      return this.membershipService.importCsvRecords(file.buffer, user.id);
+    }
     return this.recordService.importCsvRecords(code, file.buffer);
   }
 
@@ -387,6 +396,10 @@ export class MasterDataController {
       throw new ForbiddenException(
         'Only admin users can perform this operation',
       );
+    }
+    if (code === SYSTEM_DATASET_ORG_MEMBERSHIPS) {
+      const record = Array.isArray(data) ? data[0] : data;
+      return this.membershipService.createRecord(record, user.id);
     }
     return this.recordService.createRecord(code, data);
   }
@@ -423,10 +436,13 @@ export class MasterDataController {
     @Query() query: Record<string, string>,
   ) {
     const { _select, _page, _limit, _sortBy, _sortOrder, ...filter } = query;
-    const select = _select ? _select.split(',') : undefined;
     const page = _page ? parseInt(_page, 10) : 1;
     const limit = _limit ? parseInt(_limit, 10) : 10;
     const sortOrder = _sortOrder === 'asc' ? 'asc' : 'desc';
+    if (code === SYSTEM_DATASET_ORG_MEMBERSHIPS) {
+      return this.membershipService.findRecords(filter, page, limit, _sortBy, sortOrder);
+    }
+    const select = _select ? _select.split(',') : undefined;
     return this.recordService.findRecords(
       code,
       filter,
@@ -477,6 +493,15 @@ export class MasterDataController {
         'Only admin users can perform this operation',
       );
     }
+    if (code === SYSTEM_DATASET_ORG_MEMBERSHIPS) {
+      const id = filter.id ? Number(filter.id) : null;
+      if (!id) {
+        throw new BadRequestException(
+          'Membership update requires an id filter (?id=123).',
+        );
+      }
+      return this.membershipService.updateRecord(id, data, user.id);
+    }
     return this.recordService.updateRecords(code, filter, data);
   }
 
@@ -510,6 +535,15 @@ export class MasterDataController {
       throw new ForbiddenException(
         'Only admin users can perform this operation',
       );
+    }
+    if (code === SYSTEM_DATASET_ORG_MEMBERSHIPS) {
+      const id = filter.id ? Number(filter.id) : null;
+      if (!id) {
+        throw new BadRequestException(
+          'Membership delete requires an id filter (?id=123).',
+        );
+      }
+      return this.membershipService.deleteRecord(id);
     }
     return this.recordService.deleteRecords(code, filter);
   }

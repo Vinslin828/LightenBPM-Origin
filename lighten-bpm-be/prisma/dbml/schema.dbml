@@ -144,7 +144,7 @@ Table form_workflow_bindings {
   created_by Int [not null]
   created_at DateTime [default: `now()`, not null]
   updated_by Int [not null]
-  updated_at DateTime [not null]
+  updated_at DateTime [default: `now()`, not null]
 }
 
 Table application_instances {
@@ -306,6 +306,7 @@ Table users {
   name String [not null]
   email String [unique]
   job_grade Int [not null]
+  lang String [not null, default: 'en']
   created_at DateTime [default: `now()`, not null]
   updated_at DateTime [not null]
   deleted_at DateTime
@@ -322,6 +323,19 @@ Table org_units {
   updated_by Int
   updated_at DateTime [not null]
   deleted_at DateTime
+}
+
+Table org_unit_translations {
+  id Int [pk, increment]
+  org_unit_id Int [not null]
+  lang String [not null]
+  name String [not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [not null]
+
+  indexes {
+    (org_unit_id, lang) [unique]
+  }
 }
 
 Table user_default_orgs {
@@ -581,6 +595,8 @@ Ref: org_units.parent_id - org_units.id
 Ref: org_units.created_by > users.id
 
 Ref: org_units.updated_by > users.id
+
+Ref: org_unit_translations.org_unit_id > org_units.id [delete: Cascade]
 
 Ref: user_default_orgs.user_id - users.id [delete: Cascade]
 

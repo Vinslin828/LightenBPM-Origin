@@ -3,7 +3,7 @@
 import * as React from "react";
 import { cn } from "@/utils/cn";
 import { SelectOption } from "./single-select";
-import { Check, ChevronDown, SearchIcon } from "lucide-react";
+import { Check, ChevronDown, SearchIcon, X } from "lucide-react";
 import { Input } from "@ui/input";
 
 type BaseProps<T extends string | number> = {
@@ -11,6 +11,7 @@ type BaseProps<T extends string | number> = {
   placeholder?: string;
   disabled?: boolean;
   readonly?: boolean;
+  clearable?: boolean;
   hasError?: boolean;
   className?: string;
   name?: string;
@@ -18,6 +19,7 @@ type BaseProps<T extends string | number> = {
   onSearchChange?: (search: string) => void;
   onLoadMore?: () => void;
   isFetchingMore?: boolean;
+  onClear?: () => void;
 };
 
 type SingleModeProps<T extends string | number = string> = BaseProps<T> & {
@@ -52,6 +54,7 @@ export function SearchableSelect<T extends string | number = string>(
     placeholder = "Select an option",
     disabled,
     readonly,
+    clearable,
     hasError,
     className,
     name,
@@ -59,6 +62,7 @@ export function SearchableSelect<T extends string | number = string>(
     onSearchChange,
     onLoadMore,
     isFetchingMore,
+    onClear,
   } = props;
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -130,6 +134,14 @@ export function SearchableSelect<T extends string | number = string>(
     setOpen(false);
   };
 
+  const handleClear = (event: React.MouseEvent<HTMLElement>) => {
+    event.stopPropagation();
+    if (disabled || readonly || isMultiMode(props)) return;
+    onClear?.();
+    setSearch("");
+    setOpen(false);
+  };
+
   React.useEffect(() => {
     if (disabled || readonly) {
       setOpen(false);
@@ -174,7 +186,27 @@ export function SearchableSelect<T extends string | number = string>(
         >
           {selectedLabels.length > 0 ? selectedLabels.join(", ") : placeholder}
         </span>
-        <ChevronDown className="h-4 w-4 text-secondary-text" />
+        {!isMultiMode(props) &&
+        clearable &&
+        props.value !== undefined &&
+        props.value !== "" ? (
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label="Clear selection"
+            className="ml-2 rounded p-1 text-secondary-text hover:text-dark focus:outline-none"
+            onClick={handleClear}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                handleClear(event as unknown as React.MouseEvent<HTMLElement>);
+              }
+            }}
+          >
+            <X className="h-4 w-4" />
+          </span>
+        ) : (
+          <ChevronDown className="h-4 w-4 text-secondary-text" />
+        )}
       </button>
 
       {open && (

@@ -610,11 +610,11 @@ export function getDefaultAttributes<T extends FormBuilderConfigKey>(
 
 export const tabItems = [
   { key: "form-builder", label: "Form Builder", labelKey: "form_builder" },
-  // {
-  //   key: "language-editor",
-  //   label: "Language Editor",
-  //   labelKey: "language_editor",
-  // },
+  {
+    key: "language-editor",
+    label: "Language Editor",
+    labelKey: "language_editor",
+  },
   { key: "preview", label: "Preview", labelKey: "preview" },
   {
     key: "schema-generation",

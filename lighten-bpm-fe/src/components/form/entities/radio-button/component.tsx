@@ -8,6 +8,15 @@ import { useRefWithErrorFocus } from "@/utils/error-focus";
 import { radioButtonEntity } from "./definition";
 import { OptionType } from "@/types/domain";
 import { useFieldValidationState } from "@/hooks/useFieldValidationState";
+import {
+  getEntityTranslationKey,
+  getOptionTranslationKey,
+  resolveEntityLabel,
+  useEntityLabel,
+} from "@/hooks/useEntityLabel";
+import { useAtomValue } from "jotai";
+import { formSettingAtom } from "@/store";
+import { useTranslation } from "react-i18next";
 
 export const RadioButtonEntity = createEntityComponent(
   radioButtonEntity,
@@ -18,6 +27,17 @@ export const RadioButtonEntity = createEntityComponent(
 
     const { localError, isValidating, validateAndCommit } =
       useFieldValidationState(props.entity.id);
+    const { defaultLang, labelTranslations } = useAtomValue(formSettingAtom);
+    const { i18n } = useTranslation();
+    const entityTranslationKey = getEntityTranslationKey(
+      props.entity.id,
+      props.entity.attributes,
+    );
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      entityTranslationKey,
+    );
 
     // console.debug("error", props.entity.error);
 
@@ -26,6 +46,17 @@ export const RadioButtonEntity = createEntityComponent(
       formatError(props.entity.value, props.entity.error)?._errors?.[0];
 
     const options = props.entity.attributes.options;
+    const translatedOptions = options.map((option) => ({
+      ...option,
+      label: resolveEntityLabel(
+        getOptionTranslationKey(props.entity.id, option.value),
+        option.label,
+        labelTranslations,
+        defaultLang,
+        i18n.language,
+        [getOptionTranslationKey(entityTranslationKey, option.value)],
+      ),
+    }));
 
     const userValue =
       typeof props.entity.value === "string"
@@ -74,9 +105,7 @@ export const RadioButtonEntity = createEntityComponent(
           aria-required={props.entity.attributes.required}
           className="mb-2 block"
         >
-          {!!props.entity.attributes.label.value
-            ? props.entity.attributes.label.value
-            : props.entity.attributes.name}
+          {label}
         </Label>
 
         <div
@@ -94,7 +123,7 @@ export const RadioButtonEntity = createEntityComponent(
               onChange={(val) => {
                 void handleValidation(val);
               }}
-              options={options}
+              options={translatedOptions}
               className={cn(
                 "flex gap-4",
                 direction === "horizontal" ? "flex-row flex-wrap" : "flex-col",

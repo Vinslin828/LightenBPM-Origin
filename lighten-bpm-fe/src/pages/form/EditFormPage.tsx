@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { BackIcon, EditIcon, ExportIcon } from "@/components/icons";
 import {
@@ -6,6 +6,8 @@ import {
   SetStateAction,
   useCallback,
   useEffect,
+  useMemo,
+  useRef,
   useState,
 } from "react";
 import { BasicFormBuilder } from "@/components/form/builder/component";
@@ -45,9 +47,11 @@ import useValidatorStore from "@/hooks/useValidatorStore";
 import { useValidateForm } from "@/hooks/useValidator";
 import { parseFormData } from "@/utils/parser";
 import ApplicationForm from "@ui/ApplicationForm";
+import LanguageEditor from "@/components/form/builder/language-editor";
 
 const formBuilderTabPrefix = "form_builder.tabs";
 const DUPLICATE_FIELD_NAME_ERROR_FLAG = Symbol("DuplicateFieldNameError");
+const DIRTY_SNAPSHOT_VERSION = "v2";
 
 type DuplicateFieldNameError = ZodError & {
   [DUPLICATE_FIELD_NAME_ERROR_FLAG]: true;
@@ -85,10 +89,29 @@ function toComponentLabel(type?: string) {
   return `${type.charAt(0).toUpperCase()}${type.slice(1)}`;
 }
 
+function createFormEditorSnapshot(input: {
+  schema?: FormDefinition["schema"];
+  validation?: FormDefinition["validation"];
+  defaultLang?: string;
+  translationLangs?: string[];
+  labelTranslations?: Record<string, Record<string, string>>;
+}) {
+  return JSON.stringify({
+    schema: input.schema
+      ? hydrateSchemaWithRequiredDefaults(input.schema)
+      : undefined,
+    validation: input.validation ?? {},
+    defaultLang: input.defaultLang ?? "en",
+    translationLangs: input.translationLangs ?? [],
+    labelTranslations: input.labelTranslations ?? {},
+  });
+}
+
 export const EditFormPage = () => {
   const { formId: formId } = useParams<{ formId: string }>();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { open, isOpen, close } = useModal();
   const {
@@ -100,11 +123,25 @@ export const EditFormPage = () => {
     EntitiesValues<typeof basicFormBuilder>
   >({});
   const [activeTab, setActiveTab] = useState<string>("form-builder");
+  const [builderRevision, setBuilderRevision] = useState(0);
+  const [builderSyncedFormKey, setBuilderSyncedFormKey] = useState<
+    string | null
+  >(null);
+  const [settingsSyncedFormKey, setSettingsSyncedFormKey] = useState<
+    string | null
+  >(null);
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  const syncedFormKeyRef = useRef<string | null>(null);
   const {
     form,
     isLoading: isFormLoading,
     refetch: refetchForm,
   } = useForm(formId);
+  const currentFormKey = useMemo(
+    () =>
+      form ? `${DIRTY_SNAPSHOT_VERSION}:${form.id}:${form.revisionId}` : null,
+    [form?.id, form?.revisionId],
+  );
   const { mutate: updateForm, isPending: isUpdating } = useUpdateForm();
   const { mutateAsync: validateForm } = useValidateForm();
   const { initiateValidatorStore, removeValidator } = useValidatorStore();
@@ -137,9 +174,11 @@ export const EditFormPage = () => {
   const builderStore = useBuilderStore(basicFormBuilder, {
     events: {
       onEntityAdded(payload) {
+        setBuilderRevision((revision) => revision + 1);
         setActiveEntityId(payload.entity.id);
       },
       onEntityDeleted(payload) {
+        setBuilderRevision((revision) => revision + 1);
         const rootEntityId = builderStore.getData().schema.root[0];
 
         if (payload.entity.id === activeEntityId && rootEntityId) {
@@ -150,6 +189,7 @@ export const EditFormPage = () => {
         removeValidator(payload.entity.id);
       },
       onEntityAttributeUpdated(payload) {
+        setBuilderRevision((revision) => revision + 1);
         void builderStore.validateEntityAttribute(
           payload.entity.id,
           payload.attributeName,
@@ -158,33 +198,58 @@ export const EditFormPage = () => {
     },
   });
 
+  // Effect 1: sync the builder store whenever the saved schema changes
   useEffect(() => {
-    // set form-builder schema after form data is fetched
-    console.debug(form?.schema);
-    if (form?.schema) {
-      const hydratedSchema = hydrateSchemaWithRequiredDefaults(form.schema);
-      validateSchema(hydratedSchema, basicFormBuilder)
-        .then((result) => {
-          console.debug(hydratedSchema);
-          initiateValidatorStore(hydratedSchema);
-          console.debug({ result });
-          builderStore.setData({
-            schema: hydratedSchema,
-            entitiesAttributesErrors: {},
-            schemaError: undefined,
-          });
-          const rootEntityId = builderStore.getData().schema.root[0];
-          setActiveEntityId(rootEntityId ?? null);
-        })
-        .catch((error) => {
-          console.error(error);
+    if (!form?.schema || !currentFormKey) return;
+    const hydratedSchema = hydrateSchemaWithRequiredDefaults(form.schema);
+    validateSchema(hydratedSchema, basicFormBuilder)
+      .then(() => {
+        console.debug("[schema-sync] hydrated schema", hydratedSchema);
+        initiateValidatorStore(hydratedSchema);
+        builderStore.setData({
+          schema: hydratedSchema,
+          entitiesAttributesErrors: {},
+          schemaError: undefined,
         });
-    }
-    if (form?.validation) {
-      console.debug();
-      setFormSetting({ validation: form?.validation });
-    }
-  }, [form?.schema, builderStore]);
+        setBuilderRevision((revision) => revision + 1);
+        setBuilderSyncedFormKey(currentFormKey);
+        const rootEntityId = builderStore.getData().schema.root[0];
+        setActiveEntityId(rootEntityId ?? null);
+      })
+      .catch((error) => {
+        console.error("[schema-sync] validation failed", error);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form?.schema, currentFormKey, builderStore]);
+
+  // Effect 2: sync formSetting from the backend whenever the form's translation
+  // data changes. This runs on initial page load (hard refresh) and whenever the
+  // server revision changes. We deliberately watch individual scalar fields so
+  // that structural sharing in React Query doesn't mask a changed value.
+  useEffect(() => {
+    if (!form?.validation || !currentFormKey) return;
+    console.log("[EditFormPage] syncing formSetting →", {
+      revisionId: form.revisionId,
+      defaultLang: form.defaultLang,
+      translationLangs: form.translationLangs,
+      labelTranslationCount: Object.keys(form.labelTranslations ?? {}).length,
+    });
+    setFormSetting({
+      validation: form.validation,
+      defaultLang: form.defaultLang ?? "en",
+      translationLangs: form.translationLangs ?? [],
+      labelTranslations: form.labelTranslations ?? {},
+    });
+    setSettingsSyncedFormKey(currentFormKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentFormKey,
+    form?.revisionId,
+    form?.translationLangs,
+    form?.defaultLang,
+    form?.labelTranslations,
+    form?.validation,
+  ]);
 
   useEffect(() => {
     setBstore(builderStore);
@@ -195,6 +260,225 @@ export const EditFormPage = () => {
   useEffect(() => {
     setSidebarCollapsed(true);
   }, [setSidebarCollapsed]);
+
+  const currentSnapshot = useMemo(
+    () =>
+      createFormEditorSnapshot({
+        schema: builderStore.getData().schema,
+        validation: formSetting.validation,
+        defaultLang: formSetting.defaultLang,
+        translationLangs: formSetting.translationLangs,
+        labelTranslations: formSetting.labelTranslations,
+      }),
+    [builderStore, builderRevision, formSetting],
+  );
+
+  useEffect(() => {
+    if (
+      !currentFormKey ||
+      builderSyncedFormKey !== currentFormKey ||
+      settingsSyncedFormKey !== currentFormKey
+    ) {
+      return;
+    }
+
+    if (syncedFormKeyRef.current === currentFormKey) {
+      return;
+    }
+
+    syncedFormKeyRef.current = currentFormKey;
+    setSavedSnapshot(currentSnapshot);
+  }, [
+    currentFormKey,
+    builderSyncedFormKey,
+    settingsSyncedFormKey,
+    currentSnapshot,
+  ]);
+
+  const isSyncedToCurrentForm =
+    Boolean(currentFormKey) &&
+    builderSyncedFormKey === currentFormKey &&
+    settingsSyncedFormKey === currentFormKey;
+
+  const isDirty =
+    Boolean(savedSnapshot) &&
+    isSyncedToCurrentForm &&
+    currentSnapshot !== savedSnapshot;
+
+  const unsavedChangesMessage = t("toast.unsaved_form_changes_confirm");
+  const currentPathRef = useRef(
+    `${location.pathname}${location.search}${location.hash}`,
+  );
+
+  useEffect(() => {
+    currentPathRef.current = `${location.pathname}${location.search}${location.hash}`;
+  }, [location.pathname, location.search, location.hash]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirty) {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isDirty]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!isDirty || event.defaultPrevented) {
+        return;
+      }
+
+      if (
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        event.button !== 0
+      ) {
+        return;
+      }
+
+      const anchor = (event.target as Element | null)?.closest?.("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+
+      if (
+        anchor.target === "_blank" ||
+        anchor.hasAttribute("download") ||
+        anchor.getAttribute("href")?.startsWith("#")
+      ) {
+        return;
+      }
+
+      const targetUrl = new URL(anchor.href, window.location.href);
+      if (targetUrl.origin !== window.location.origin) {
+        return;
+      }
+
+      const nextPath = `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
+      if (nextPath === currentPathRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      if (window.confirm(unsavedChangesMessage)) {
+        navigate(nextPath);
+      }
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => {
+      document.removeEventListener("click", handleDocumentClick, true);
+    };
+  }, [isDirty, navigate, unsavedChangesMessage]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (!isDirty) {
+        return;
+      }
+
+      if (!window.confirm(unsavedChangesMessage)) {
+        window.history.pushState(null, "", currentPathRef.current);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [isDirty, unsavedChangesMessage]);
+
+  const navigateWithDirtyCheck = useCallback(
+    (path: string) => {
+      if (!isDirty || window.confirm(unsavedChangesMessage)) {
+        navigate(path);
+      }
+    },
+    [isDirty, navigate, unsavedChangesMessage],
+  );
+
+  // Must be defined before any early returns to satisfy Rules of Hooks.
+  // The callback body safely uses form! — it's only ever called after the
+  // early-return guards have confirmed form is non-null.
+  //
+  // `overrides` lets callers (e.g. LanguageEditor) pass the freshly-computed
+  // state values synchronously, bypassing React's async setFormSetting batching.
+  // Without this, a save triggered immediately after setFormSetting would still
+  // read the previous formSetting from the closure (stale-closure problem).
+  const handleSaveTranslations = useCallback(
+    async (overrides?: {
+      translationLangs?: string[];
+      labelTranslations?: Record<string, Record<string, string>>;
+    }) => {
+      const savedSchema = hydrateSchemaWithRequiredDefaults(form!.schema);
+      const currentSchema = builderStore.getData().schema;
+      if (JSON.stringify(currentSchema) !== JSON.stringify(savedSchema)) {
+        toast({
+          variant: "destructive",
+          title: t("toast.save_form_changes_before_translations"),
+          description: t("toast.save_form_changes_before_translations_desc"),
+        });
+        throw new Error(
+          "Form changes must be saved before saving translations.",
+        );
+      }
+
+      const schemaValidationResult = await builderStore.validateSchema();
+      if (!schemaValidationResult.success) {
+        if (
+          schemaValidationResult.reason.code === "InvalidEntitiesAttributes"
+        ) {
+          const firstInvalidEntityId = Object.keys(
+            schemaValidationResult.reason.payload.entitiesAttributesErrors,
+          )[0];
+          if (builderStore.getSchema().entities[firstInvalidEntityId]) {
+            setActiveEntityId(firstInvalidEntityId);
+          }
+        }
+
+        toast({
+          variant: "destructive",
+          title: t("toast.save_form_changes_before_translations"),
+          description: t("toast.save_form_changes_before_translations_desc"),
+        });
+        throw new Error(
+          "Form changes must be saved before saving translations.",
+        );
+      }
+
+      const effectiveSetting = { ...formSetting, ...overrides };
+      const nextForm = {
+        ...form!,
+        validation: effectiveSetting.validation,
+        defaultLang: effectiveSetting.defaultLang,
+        translationLangs: effectiveSetting.translationLangs,
+        labelTranslations: effectiveSetting.labelTranslations,
+        schema: builderStore.getData().schema,
+      };
+      await new Promise<void>((resolve, reject) => {
+        updateForm(nextForm, {
+          onSuccess() {
+            setSavedSnapshot(createFormEditorSnapshot(nextForm));
+            resolve();
+          },
+          onError(err) {
+            reject(err);
+          },
+        });
+      });
+    },
+    [form, formSetting, builderStore, updateForm, setActiveEntityId, toast, t],
+  );
 
   if (isFormLoading) {
     // TODO: loading page
@@ -310,6 +594,8 @@ export const EditFormPage = () => {
             /> */}
           </>
         );
+      case "language-editor":
+        return <LanguageEditor onSave={handleSaveTranslations} />;
       case "schema-generation":
         return (
           <SchemaGenerationTab
@@ -534,22 +820,23 @@ export const EditFormPage = () => {
     if (!validateFormFieldNames(form)) {
       return;
     }
-    updateForm(
-      {
-        ...form,
-        validation: formSetting.validation,
-        publishStatus: FormStatus.Published,
-        schema: builderStore.getData().schema,
+    const nextForm = {
+      ...form,
+      validation: formSetting.validation,
+      defaultLang: formSetting.defaultLang,
+      translationLangs: formSetting.translationLangs,
+      labelTranslations: formSetting.labelTranslations,
+      publishStatus: FormStatus.Published,
+      schema: builderStore.getData().schema,
+    };
+    updateForm(nextForm, {
+      onSuccess(data) {
+        setSavedSnapshot(createFormEditorSnapshot(nextForm));
+        void refetchForm();
+        toast({ title: t("toast.form_saved_as_published") });
+        console.debug({ "saved as published": data });
       },
-      {
-        onSuccess(data) {
-          refetchForm();
-          navigate("/forms");
-          toast({ title: t("toast.form_saved_as_published") });
-          console.debug({ "saved as published": data });
-        },
-      },
-    );
+    });
   }
 
   async function saveAsTemplate(form: FormDefinition) {
@@ -588,21 +875,23 @@ export const EditFormPage = () => {
     if (!validateFormFieldNames(form)) {
       return;
     }
-    updateForm(
-      {
-        ...form,
-        validation: formSetting.validation,
-        publishStatus: FormStatus.Draft,
-        schema: builderStore.getData().schema,
+    const nextForm = {
+      ...form,
+      validation: formSetting.validation,
+      defaultLang: formSetting.defaultLang,
+      translationLangs: formSetting.translationLangs,
+      labelTranslations: formSetting.labelTranslations,
+      publishStatus: FormStatus.Draft,
+      schema: builderStore.getData().schema,
+    };
+    updateForm(nextForm, {
+      onSuccess(data) {
+        setSavedSnapshot(createFormEditorSnapshot(nextForm));
+        void refetchForm();
+        toast({ title: t("toast.form_saved_as_draft") });
+        console.debug({ "saved as draft": data });
       },
-      {
-        onSuccess(data) {
-          navigate("/forms");
-          toast({ title: t("toast.form_saved_as_draft") });
-          console.debug({ "saved as draft": data });
-        },
-      },
-    );
+    });
   }
 
   return (
@@ -614,23 +903,39 @@ export const EditFormPage = () => {
           name: form.name,
           description: form.description,
           tags: form.tags,
+          defaultLang: formSetting.defaultLang,
         }}
-        onSubmit={(data) =>
-          updateForm(
-            {
-              ...form,
-              name: data.name,
-              description: data.description,
-              tags: data.tags,
+        onSubmit={(data) => {
+          // Update formSetting immediately so the Language Editor and
+          // this modal both reflect the new default language right away,
+          // even before the server response arrives.
+          setFormSetting((prev) => ({
+            ...prev,
+            defaultLang: data.defaultLang,
+          }));
+          const nextForm = {
+            ...form,
+            name: data.name,
+            description: data.description,
+            tags: data.tags,
+            defaultLang: data.defaultLang,
+          };
+          updateForm(nextForm, {
+            onSuccess(res) {
+              setSavedSnapshot(
+                createFormEditorSnapshot({
+                  ...nextForm,
+                  validation: formSetting.validation,
+                  translationLangs: formSetting.translationLangs,
+                  labelTranslations: formSetting.labelTranslations,
+                  schema: builderStore.getData().schema,
+                }),
+              );
+              console.debug({ res });
+              close();
             },
-            {
-              onSuccess(data) {
-                console.debug({ data });
-                close();
-              },
-            },
-          )
-        }
+          });
+        }}
       />
       <ExportFormModal
         isOpen={isExportOpen}
@@ -645,7 +950,7 @@ export const EditFormPage = () => {
             <Button
               variant={"tertiary"}
               className="p-2 ring-stroke"
-              onClick={() => navigate("/forms")}
+              onClick={() => navigateWithDirtyCheck("/forms")}
             >
               <BackIcon />
             </Button>
@@ -675,6 +980,30 @@ export const EditFormPage = () => {
           </div>
 
           <div className="flex items-center space-x-3">
+            <div
+              className={`flex h-9 items-center gap-2 rounded-full border px-3 text-sm font-medium ${
+                isUpdating
+                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                  : isDirty
+                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isUpdating
+                    ? "bg-blue-500"
+                    : isDirty
+                      ? "bg-amber-500"
+                      : "bg-emerald-500"
+                }`}
+              />
+              {isUpdating
+                ? t("form_builder.save_status.saving")
+                : isDirty
+                  ? t("form_builder.save_status.unsaved")
+                  : t("form_builder.save_status.saved")}
+            </div>
             <Button
               variant="secondary"
               icon={<ExportIcon className="w-4 h-4" />}

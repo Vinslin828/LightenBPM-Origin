@@ -49,6 +49,9 @@
     "fill_out_form_correctly": "请正确填写表单。",
     "form_saved_as_draft": "表单已存为草稿",
     "form_saved_as_published": "表单已发布",
+    "save_form_changes_before_translations": "请先保存表单变更",
+    "save_form_changes_before_translations_desc": "请先修正并保存当前表单设计中的变更，再保存翻译。",
+    "unsaved_form_changes_confirm": "您有尚未保存的表单变更，确定要离开此页面吗？",
     "fix_highlighted_errors_at_component": "请修正 {{component}} 组件的高亮错误。",
     "export_success": "您的文件已成功导出。",
     "export_failed": "导出文件失败，请重试。",
@@ -74,6 +77,12 @@
     "enter_email": "请输入您的邮箱",
     "enter_password": "请输入您的密码"
   },
+  "form_list": {
+    "title": "表单管理",
+    "import": "导入",
+    "new_form": "新建表单",
+    "search_placeholder": "搜索..."
+  },
   "form_builder": {
     "drag_field_here": "将字段拖到此处来构建您的表单",
     "form_name": "表单名称",
@@ -83,6 +92,11 @@
     "type_here": "在此输入...",
     "duplicate_field_name": "字段名称“{{name}}”重复，请使用唯一的字段名称。",
     "enter_form_name": "输入表单名称",
+    "save_status": {
+      "saved": "已保存",
+      "unsaved": "尚未保存",
+      "saving": "保存中"
+    },
     "entities": {
       "text_field": "输入框",
       "textarea_field": "文本域",
@@ -113,7 +127,25 @@
       "schema_generation": "结构生成",
       "template": "模板",
       "component": "组件"
-    }
+    },
+    "default_lang": "默认语言",
+    "add_language": "添加语言",
+    "remove_language": "移除语言",
+    "select_language": "选择语言",
+    "language_editor_default": "默认语言",
+    "language_editor_empty": "请打开一个表单以开始编辑翻译。",
+    "language_editor_no_fields": "未找到表单字段，请先在表单构建器中添加字段。",
+    "field_name": "字段",
+    "default": "默认",
+    "copy_all": "复制",
+    "copied": "已复制！",
+    "copy_column": "将所有标签复制到剪贴板",
+    "paste_all": "批量粘贴",
+    "paste_all_title": "粘贴 {{lang}} 翻译",
+    "paste_all_hint": "每行粘贴一个翻译标签，顺序与参考列相同。",
+    "paste_reference": "参考（默认语言）",
+    "paste_line_mismatch": "行数不匹配：预期 {{expected}} 行，实际 {{got}} 行",
+    "saved": "已保存！"
   },
   "flow": {
     "title": "流程引擎",
@@ -160,7 +192,8 @@
       "select_role": "选择角色",
       "select_a_role": "选择一个角色",
       "advanced_settings": "高级设置",
-      "organization_reference_field": "组织引用字段"
+      "organization_reference_field": "组织引用字段",
+      "organization_reference_field_helper": "当申请人隶属多个部门，并在表单中选择本次申请组织时使用。此表达式需返回选中的组织 ID 或组织代码。"
     }
   },
   "dashboard": {
@@ -331,11 +364,14 @@
     "save": "保存",
     "saved": "角色保存成功",
     "save_error": "角色保存失败",
-    "delete": "删除",
-    "confirm_delete_title": "删除",
+    "delete": "删除角色",
+    "confirm_delete_title": "删除角色",
     "confirm_delete_message": "删除后，此角色将无法恢复。\n确定要删除吗？",
     "delete_success": "角色删除成功",
     "delete_error": "角色删除失败",
+    "danger_zone": "危险区域",
+    "delete_warning": "永久删除此角色，此操作无法撤销。",
+    "delete_disabled_hint": "请先移除所有成员，再删除此角色。",
     "select_to_view": "选择一个角色以查看详情",
     "no_role": "暂无角色",
     "empty_hint": "点击此处开始创建。",

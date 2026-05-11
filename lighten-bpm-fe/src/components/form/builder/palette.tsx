@@ -14,7 +14,10 @@ import { BuilderStore } from "@coltorapps/builder";
 import { basicFormBuilder } from "./definition";
 import { activeSlotAtom } from "@/store";
 import { useAtom } from "jotai";
-import { Dispatch, SetStateAction } from "react";
+import { Dispatch, SetStateAction, useEffect, useRef } from "react";
+import { useDraggable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import { PALETTE_DRAG_PREFIX } from "@/components/dnd";
 
 type Props = {
   formTemplates: FormDefinition[];
@@ -91,7 +94,7 @@ function ComponentTabContent({
 
   return (
     <div
-      className="p-4 space-y-6"
+      className="px-1 py-4 space-y-6"
       onClick={() => {
         setActiveEntityId(null);
       }}
@@ -117,10 +120,11 @@ function ComponentTabContent({
               </h4>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {components.map((component) => (
-                <PaletteTile
+                <DraggablePaletteTile
                   key={component.key}
+                  entityType={component.key}
                   icon={component.icon}
                   labelKey={component.labelKey}
                   onClick={() => {
@@ -150,8 +154,9 @@ function ComponentTabContent({
                         // 👉 把格子索引存進 container 的 slotMapping attribute
                         const currentMapping =
                           ((activeEntity.attributes as Record<string, unknown>)
-                            .slotMapping as Record<string, number> | undefined) ??
-                          {};
+                            .slotMapping as
+                            | Record<string, number>
+                            | undefined) ?? {};
                         builderStore.setEntityAttribute(
                           activeSlot.entityId,
                           "slotMapping",
@@ -180,6 +185,61 @@ function ComponentTabContent({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function DraggablePaletteTile({
+  entityType,
+  icon,
+  labelKey,
+  onClick,
+}: {
+  entityType: string;
+  icon: Parameters<typeof PaletteTile>[0]["icon"];
+  labelKey: string;
+  onClick: () => void;
+}) {
+  const suppressClickRef = useRef(false);
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: `${PALETTE_DRAG_PREFIX}${entityType}`,
+      data: {
+        type: "palette",
+        entityType,
+      },
+    });
+
+  useEffect(() => {
+    if (!isDragging) return;
+    suppressClickRef.current = true;
+  }, [isDragging]);
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={isDragging ? "z-50 w-full opacity-70" : "w-full"}
+    >
+      <PaletteTile
+        icon={icon}
+        labelKey={labelKey}
+        onClick={() => {
+          if (suppressClickRef.current) {
+            setTimeout(() => {
+              suppressClickRef.current = false;
+            }, 0);
+            return;
+          }
+          onClick();
+        }}
+      />
     </div>
   );
 }

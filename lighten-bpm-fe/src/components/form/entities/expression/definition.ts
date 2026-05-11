@@ -10,6 +10,7 @@ import { disabledAttribute } from "../../attributes/disabled/definition";
 import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { requiredAttribute } from "../../attributes/required/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const expressionFieldEntity = createEntity({
   name: EntityKey.expressionField,
@@ -22,6 +23,7 @@ export const expressionFieldEntity = createEntity({
     disabledAttribute,
     readonlyAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value) {
     return z.any().optional().parse(value);

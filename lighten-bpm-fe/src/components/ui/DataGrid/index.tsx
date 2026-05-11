@@ -1,4 +1,5 @@
 import * as React from "react";
+import dayjs from "dayjs";
 import {
   DataGrid as MUIDataGrid,
   GridColDef,
@@ -13,8 +14,10 @@ import { AddButtonIcon, TrashIcon } from "@/components/icons";
 import {
   buildEmptyRow,
   canAddRow,
+  getDropdownOptions,
   getHeaderField,
   getRequiredError,
+  isEmptyValue,
   parseRowsFromValue,
 } from "./grid-data-grid.helpers";
 import { createGridColumns } from "./grid-data-grid.columns";
@@ -30,8 +33,136 @@ type Props = {
   maxRows?: number;
   readonly?: boolean;
   evaluateExpression?: (code: string, row: Record<string, unknown>) => unknown;
-  resolvedDynamicOptions?: Record<string, import("@ui/select/single-select").SelectOption<string>[]>;
+  resolvedDynamicOptions?: Record<
+    string,
+    import("@ui/select/single-select").SelectOption<string>[]
+  >;
 };
+
+const formatCardValue = (
+  header: GridHeaderItem,
+  row: Record<string, unknown>,
+  resolvedDynamicOptions?: Props["resolvedDynamicOptions"],
+  evaluateExpression?: Props["evaluateExpression"],
+): React.ReactNode => {
+  const field = getHeaderField(header);
+
+  if (header.type === "expression") {
+    const expressionCode = header.expression ?? "";
+    if (!expressionCode || !evaluateExpression) return "";
+    const result = evaluateExpression(expressionCode, row);
+    return result === undefined || result === null ? "" : String(result);
+  }
+
+  const value = row[field];
+  if (isEmptyValue(value)) {
+    return header.placeholder ?? "";
+  }
+
+  if (header.type === "date" && typeof value === "number") {
+    const subtype = header.subtype ?? "date";
+    const format =
+      subtype === "time"
+        ? "HH:mm"
+        : subtype === "datetime"
+          ? "YYYY-MM-DD HH:mm"
+          : "YYYY-MM-DD";
+    return dayjs(value).format(format);
+  }
+
+  if (header.type === "dropdown" && typeof value === "string") {
+    const options =
+      resolvedDynamicOptions?.[header.keyValue] ?? getDropdownOptions(header);
+    return options.find((item) => item.value === value)?.label ?? value;
+  }
+
+  return String(value);
+};
+
+function MobileGridCards({
+  rows,
+  headers,
+  resolvedDynamicOptions,
+  evaluateExpression,
+}: {
+  rows: GridRowsProp;
+  headers: GridHeaderItem[];
+  resolvedDynamicOptions?: Props["resolvedDynamicOptions"];
+  evaluateExpression?: Props["evaluateExpression"];
+}) {
+  const renderField = (
+    row: GridRowModel,
+    header: GridHeaderItem,
+    rowIndex: number,
+  ) => {
+    const rowRecord = row as Record<string, unknown>;
+    const field = getHeaderField(header);
+
+    const displayValue = formatCardValue(
+      header,
+      rowRecord,
+      resolvedDynamicOptions,
+      evaluateExpression,
+    );
+    const isPlaceholder =
+      isEmptyValue(rowRecord[field]) && header.type !== "expression";
+
+    return (
+      <dd
+        className={
+          isPlaceholder
+            ? "min-w-0 whitespace-pre-wrap break-words text-sm text-secondary-text"
+            : "min-w-0 whitespace-pre-wrap break-words text-sm text-dark"
+        }
+      >
+        {displayValue || "-"}
+      </dd>
+    );
+  };
+
+  if (!rows.length) {
+    return (
+      <div className="md:hidden rounded-lg border border-stroke bg-white px-4 py-5 text-sm text-secondary-text">
+        No rows
+      </div>
+    );
+  }
+
+  return (
+    <div className="md:hidden space-y-3">
+      {rows.map((row, index) => {
+        const rowRecord = row as Record<string, unknown>;
+        return (
+          <section
+            key={String(row.id ?? index)}
+            className="rounded-lg border border-stroke bg-white"
+          >
+            <div className="border-b border-gray-100 px-4 py-3">
+              <p className="text-sm font-semibold text-dark">
+                Item {index + 1}
+              </p>
+            </div>
+            <dl className="divide-y divide-gray-100">
+              {headers.map((header) => {
+                return (
+                  <div
+                    key={`${String(row.id ?? index)}-${header.keyValue}`}
+                    className="grid grid-cols-[minmax(96px,38%)_1fr] gap-3 px-4 py-3"
+                  >
+                    <dt className="text-xs font-medium uppercase text-secondary-text">
+                      {header.label}
+                    </dt>
+                    {renderField(row as GridRowModel, header, index)}
+                  </div>
+                );
+              })}
+            </dl>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
 
 export function DataGrid({
   value,
@@ -57,9 +188,9 @@ export function DataGrid({
   const [rows, setRows] = React.useState<GridRowsProp>(() =>
     parseRowsFromValue(value),
   );
-  const [columnWidths, setColumnWidths] = React.useState<Record<string, number>>(
-    {},
-  );
+  const [columnWidths, setColumnWidths] = React.useState<
+    Record<string, number>
+  >({});
   const [rowModesModel, setRowModesModel] = React.useState<GridRowModesModel>(
     {},
   );
@@ -97,13 +228,16 @@ export function DataGrid({
   );
 
   const columns = React.useMemo(() => {
-    const baseColumns = createGridColumns(stableHeaders, isReadOnly, evaluateExpression, resolvedDynamicOptions).map(
-      (column) => {
-        const resizedWidth = columnWidths[column.field];
-        if (!resizedWidth) return column;
-        return { ...column, width: resizedWidth };
-      },
-    );
+    const baseColumns = createGridColumns(
+      stableHeaders,
+      isReadOnly,
+      evaluateExpression,
+      resolvedDynamicOptions,
+    ).map((column) => {
+      const resizedWidth = columnWidths[column.field];
+      if (!resizedWidth) return column;
+      return { ...column, width: resizedWidth };
+    });
 
     if (isReadOnly) {
       return baseColumns;
@@ -170,7 +304,15 @@ export function DataGrid({
     };
 
     return [...baseColumns, actionsColumn];
-  }, [columnWidths, emitRows, evaluateExpression, isReadOnly, onChange, resolvedDynamicOptions, stableHeaders]);
+  }, [
+    columnWidths,
+    emitRows,
+    evaluateExpression,
+    isReadOnly,
+    onChange,
+    resolvedDynamicOptions,
+    stableHeaders,
+  ]);
 
   const handleColumnWidthChange = React.useCallback(
     (params: GridColumnResizeParams) => {
@@ -303,31 +445,39 @@ export function DataGrid({
 
   return (
     <div className="h-fit">
-      <MUIDataGrid
+      <MobileGridCards
         rows={rows}
-        columns={columns.length ? columns : []}
-        editMode="row"
-        sx={gridSx}
-        rowModesModel={rowModesModel}
-        onRowModesModelChange={handleRowModesModelChange}
-        processRowUpdate={processRowUpdate}
-        onColumnWidthChange={handleColumnWidthChange}
-        // onProcessRowUpdateError={(error) => {
-        //   setGridError(error instanceof Error ? error.message : String(error));
-        // }}
-        hideFooter
-        disableColumnSelector
-        disableColumnResize={false}
-        rowSpacingType="border"
-        rowSelection={false}
+        headers={stableHeaders}
+        resolvedDynamicOptions={resolvedDynamicOptions}
+        evaluateExpression={evaluateExpression}
       />
+      <div className="hidden md:block">
+        <MUIDataGrid
+          rows={rows}
+          columns={columns.length ? columns : []}
+          editMode="row"
+          sx={gridSx}
+          rowModesModel={rowModesModel}
+          onRowModesModelChange={handleRowModesModelChange}
+          processRowUpdate={processRowUpdate}
+          onColumnWidthChange={handleColumnWidthChange}
+          // onProcessRowUpdateError={(error) => {
+          //   setGridError(error instanceof Error ? error.message : String(error));
+          // }}
+          hideFooter
+          disableColumnSelector
+          disableColumnResize={false}
+          rowSpacingType="border"
+          rowSelection={false}
+        />
+      </div>
       {/* {!!gridError && <ValidationError>{gridError}</ValidationError>} */}
       {!isReadOnly && (
         <button
           type="button"
           onClick={handleAddRow}
           disabled={!canAdd}
-          className="flex flex-row items-center gap-2 font-medium text-lighten-blue disabled:text-secondary-text disabled:cursor-not-allowed pt-2.5"
+          className="hidden md:flex flex-row items-center gap-2 font-medium text-lighten-blue disabled:text-secondary-text disabled:cursor-not-allowed pt-2.5"
         >
           <AddButtonIcon />
           add a row

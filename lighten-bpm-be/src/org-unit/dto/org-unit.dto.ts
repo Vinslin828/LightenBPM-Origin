@@ -13,6 +13,14 @@ export class OrgUnitDto {
   @ApiProperty()
   name: string;
 
+  @ApiProperty({
+    description: 'Localized organization names keyed by language code',
+    example: { en: 'Engineering Department', 'zh-TW': '工程部' },
+    required: false,
+    type: Object,
+  })
+  nameTranslations?: Record<string, string>;
+
   @ApiProperty({ enum: OrgUnitType })
   type: OrgUnitType;
 
@@ -42,6 +50,13 @@ export class OrgUnitDto {
     dto.id = orgUnit.id;
     dto.code = orgUnit.code;
     dto.name = orgUnit.name;
+    dto.nameTranslations = orgUnit.translations?.reduce(
+      (acc, translation) => {
+        acc[translation.lang] = translation.name;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
     dto.type = orgUnit.type;
     dto.createdAt = orgUnit.created_at;
     dto.updatedAt = orgUnit.updated_at;

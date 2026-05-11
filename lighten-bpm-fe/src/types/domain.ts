@@ -129,6 +129,9 @@ export interface FormDefinition {
   tags: Tag[];
   validation: FormSetting["validation"];
   applicantSource?: "selection" | "submitter";
+  defaultLang?: string;
+  translationLangs?: string[];
+  labelTranslations?: Record<string, Record<string, string>>;
 }
 
 export interface ResolvedFormDefinition {
@@ -210,6 +213,8 @@ export interface OrgHead {
 export interface Unit {
   id: string;
   name: string;
+  defaultName?: string;
+  nameTranslations?: Record<string, string>;
   members: User[];
   code: string;
   type?: "ORG_UNIT" | "ROLE";

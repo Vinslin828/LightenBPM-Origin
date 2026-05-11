@@ -5,6 +5,7 @@ import { formatError, ValidationError } from "@/components/ui/validation-error";
 import { createEntityComponent } from "@coltorapps/builder-react";
 import { currencyFieldEntity } from "./definition";
 import { useFieldValidationState } from "@/hooks/useFieldValidationState";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 import { extractReferencedFieldNames } from "@/hooks/useCode/utils";
 import type { CurrencyCode } from "@/types/form-builder";
 
@@ -51,6 +52,11 @@ export const CurrencyFieldEntity = createEntityComponent(
   function CurrencyFieldEntity(props) {
     const { localError, isValidating, validateAndCommit } =
       useFieldValidationState(props.entity.id);
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      props.entity.attributes.name,
+    );
 
     const coerceNumber = (input: unknown) => {
       if (typeof input === "number" && Number.isFinite(input)) return input;
@@ -169,9 +175,7 @@ export const CurrencyFieldEntity = createEntityComponent(
           htmlFor={props.entity.attributes.name || props.entity.id}
           aria-required={props.entity.attributes.required}
         >
-          {!!props.entity.attributes.label.value
-            ? props.entity.attributes.label.value
-            : props.entity.attributes.name}
+          {label}
         </Label>
         <CurrencyInput
           id={props.entity.attributes.name || props.entity.id}

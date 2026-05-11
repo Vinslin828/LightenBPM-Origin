@@ -17,6 +17,7 @@ import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { requiredAttribute } from "../../attributes/required/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const gridEntity = createEntity({
   name: EntityKey.grid,
@@ -30,6 +31,7 @@ export const gridEntity = createEntity({
     readonlyAttribute,
     disabledAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     const rawValue = z.string().optional().parse(value);

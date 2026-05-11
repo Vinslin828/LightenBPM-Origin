@@ -117,8 +117,13 @@ function Form({ form }: { form: FormDefinition }) {
   const [applicant, setApplicant] = useState<User | null>(null);
 
   useEffect(() => {
-    setFormSetting({ validation: form.validation });
-  }, [setFormSetting, form.validation]);
+    setFormSetting({
+      validation: form.validation,
+      defaultLang: form.defaultLang ?? "en",
+      translationLangs: form.translationLangs ?? [],
+      labelTranslations: form.labelTranslations ?? {},
+    });
+  }, [setFormSetting, form]);
 
   useEffect(() => {
     console.debug("initiate validator store");

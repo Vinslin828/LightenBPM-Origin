@@ -12,6 +12,7 @@ import { validatorAttribute } from "../../attributes/validator/definition";
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const toggleFieldEntity = createEntity({
   name: EntityKey.toggleField,
@@ -26,6 +27,7 @@ export const toggleFieldEntity = createEntity({
     disabledAttribute,
     readonlyAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     let schema = z.boolean();

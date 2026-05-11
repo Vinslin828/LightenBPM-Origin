@@ -4,6 +4,7 @@ import { createEntityComponent } from "@coltorapps/builder-react";
 import { buttonApiEntity } from "./definition";
 import apiCaller from "@/utils/api-caller";
 import { useCallback, useMemo, useState } from "react";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 
 export const ButtonApiEntity = createEntityComponent(
@@ -24,9 +25,13 @@ export const ButtonApiEntity = createEntityComponent(
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const label = props.entity.attributes.label?.value?.trim()
-      ? props.entity.attributes.label.value
-      : props.entity.attributes.name;
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label?.value?.trim()
+        ? props.entity.attributes.label.value
+        : props.entity.attributes.name,
+      props.entity.attributes.name,
+    );
 
     const buttonText =
       typeof props.entity.attributes.buttonText === "string" &&

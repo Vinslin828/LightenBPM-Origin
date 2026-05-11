@@ -12,10 +12,18 @@ import {
   useSelectFieldResolvedValues,
 } from "@/hooks/useFormBuilder";
 import { useFieldValidationState } from "@/hooks/useFieldValidationState";
-import { interpreterStoreAtom } from "@/store";
+import {
+  getEntityTranslationKey,
+  getOptionTranslationKey,
+  resolveEntityLabel,
+  useEntityLabel,
+} from "@/hooks/useEntityLabel";
+import { formSettingAtom, interpreterStoreAtom } from "@/store";
 
 import { selectFieldEntity } from "./definition";
 import { DatasourceValue } from "../../attributes/datasource/component";
+import { useAtomValue } from "jotai";
+import { useTranslation } from "react-i18next";
 
 export const SelectFieldEntity = createEntityComponent(
   selectFieldEntity,
@@ -24,6 +32,17 @@ export const SelectFieldEntity = createEntityComponent(
     const store = useStore();
     const { localError, isValidating, validateAndCommit } =
       useFieldValidationState(props.entity.id);
+    const { defaultLang, labelTranslations } = useAtomValue(formSettingAtom);
+    const { i18n } = useTranslation();
+    const entityTranslationKey = getEntityTranslationKey(
+      props.entity.id,
+      props.entity.attributes,
+    );
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      entityTranslationKey,
+    );
 
     const datasource = props.entity.attributes
       .datasourceType as DatasourceValue;
@@ -81,6 +100,25 @@ export const SelectFieldEntity = createEntityComponent(
       fieldName: props.entity.attributes.name,
       getFormFieldValueByName,
     });
+    const translatedOptions =
+      datasource?.type === "static"
+        ? options.map((option) => ({
+            ...option,
+            label: resolveEntityLabel(
+              getOptionTranslationKey(props.entity.id, String(option.value)),
+              String(option.label),
+              labelTranslations,
+              defaultLang,
+              i18n.language,
+              [
+                getOptionTranslationKey(
+                  entityTranslationKey,
+                  String(option.value),
+                ),
+              ],
+            ),
+          }))
+        : options;
 
     const prevWatchedFilterValueRef = useRef<unknown>(watchedFilterFieldValue);
     const prevWatchedFilterFieldNameRef = useRef<string | undefined>(
@@ -177,6 +215,10 @@ export const SelectFieldEntity = createEntityComponent(
       void handleValidation(nextValue);
     };
 
+    const handleSingleValueClear = async () => {
+      void handleValidation(undefined);
+    };
+
     const isReadonly = Boolean(props.entity.attributes.readonly);
     const isDisabled =
       Boolean(props.entity.attributes.disabled) ||
@@ -188,14 +230,14 @@ export const SelectFieldEntity = createEntityComponent(
         data-search-in-options={searchInOptions}
       >
         <Label htmlFor={id} aria-required={props.entity.attributes.required}>
-          {props.entity.attributes.label.value || props.entity.attributes.name}
+          {label}
         </Label>
 
         {multipleSelection ? (
           searchInOptions ? (
             <SearchableSelect
               mode="multiple"
-              options={options}
+              options={translatedOptions}
               value={multipleValue}
               disabled={isDisabled}
               readonly={isReadonly}
@@ -208,7 +250,7 @@ export const SelectFieldEntity = createEntityComponent(
           ) : (
             <Select
               mode="multiple"
-              options={options}
+              options={translatedOptions}
               value={multipleValue}
               disabled={isDisabled}
               readonly={isReadonly}
@@ -220,23 +262,26 @@ export const SelectFieldEntity = createEntityComponent(
             />
           )
         ) : searchInOptions ? (
-          <SearchableSelect
-            mode="single"
-            options={options}
-            value={singleValue}
-            disabled={isDisabled}
-            readonly={isReadonly}
+            <SearchableSelect
+              mode="single"
+              options={translatedOptions}
+              value={singleValue}
+              clearable
+              disabled={isDisabled}
+              readonly={isReadonly}
             placeholder={effectivePlaceholder}
             hasError={hasError}
-            onChange={(val) => {
-              void handleSingleValueChange(val);
-            }}
-          />
+              onChange={(val) => {
+                void handleSingleValueChange(val);
+              }}
+              onClear={handleSingleValueClear}
+            />
         ) : (
           <Select
             mode="single"
-            options={options}
+            options={translatedOptions}
             value={singleValue}
+            clearable
             disabled={isDisabled}
             readonly={isReadonly}
             placeholder={effectivePlaceholder}
@@ -244,6 +289,7 @@ export const SelectFieldEntity = createEntityComponent(
             onChange={(val) => {
               void handleSingleValueChange(val);
             }}
+            onClear={handleSingleValueClear}
           />
         )}
 

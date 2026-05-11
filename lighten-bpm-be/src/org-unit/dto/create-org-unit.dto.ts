@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsEnum, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsOptional,
+  IsObject,
+} from 'class-validator';
 import { OrgUnitType } from '../../common/types/common.types';
 
 export class CreateOrgUnitDto {
@@ -18,6 +24,16 @@ export class CreateOrgUnitDto {
   @IsString()
   @IsNotEmpty()
   name: string;
+
+  @ApiProperty({
+    description: 'Localized organization names keyed by language code',
+    example: { en: 'Engineering Department', 'zh-TW': '工程部' },
+    required: false,
+    type: Object,
+  })
+  @IsObject()
+  @IsOptional()
+  nameTranslations?: Record<string, string>;
 
   @ApiProperty({
     description: 'Type of the organization unit',

@@ -3,13 +3,16 @@ import { Label } from "@/components/ui/label";
 import { createEntityComponent } from "@coltorapps/builder-react";
 import { buttonUrlFieldEntity } from "./definition";
 import { Link } from "lucide-react";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 
 export const ButtonUrlFieldEntity = createEntityComponent(
   buttonUrlFieldEntity,
   function ButtonUrlFieldEntity(props) {
-    const label = !!props.entity.attributes.label.value
-      ? props.entity.attributes.label.value
-      : props.entity.attributes.name;
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      props.entity.attributes.name,
+    );
 
     const buttonText = props.entity.attributes.buttonText?.trim()
       ? props.entity.attributes.buttonText

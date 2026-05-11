@@ -88,7 +88,7 @@ export default function OrganizationDetailPanel({
   // Update form when org unit data loads (only when ID changes)
   useEffect(() => {
     if (orgUnit) {
-      setName(orgUnit.name);
+      setName(orgUnit.defaultName ?? orgUnit.name);
       setCode(orgUnit.code);
       setParentCode(orgUnit.parent?.code ?? NO_PARENT_VALUE);
       setHasChanges(false);
@@ -100,12 +100,20 @@ export default function OrganizationDetailPanel({
   useEffect(() => {
     if (orgUnit) {
       const changed =
-        name !== orgUnit.name ||
+        name !== (orgUnit.defaultName ?? orgUnit.name) ||
         code !== orgUnit.code ||
         parentCode !== currentParentCode;
       setHasChanges(changed);
     }
-  }, [name, code, parentCode, orgUnit?.name, orgUnit?.code, currentParentCode]);
+  }, [
+    name,
+    code,
+    parentCode,
+    orgUnit?.name,
+    orgUnit?.defaultName,
+    orgUnit?.code,
+    currentParentCode,
+  ]);
 
   const handleSave = async () => {
     if (!orgUnit || !hasChanges) return;

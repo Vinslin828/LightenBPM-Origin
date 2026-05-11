@@ -261,4 +261,11 @@ export type FormSetting = {
       isApi?: boolean;
     }[];
   };
+  /** ISO language code for the form's default/authoring language, e.g. "en", "zh-TW" */
+  defaultLang: string;
+  /** Extra languages the builder has added for translation (excluding defaultLang) */
+  translationLangs: string[];
+  /** Keyed by entityId (or `${entityId}_col_${keyValue}` for grid columns).
+   *  Each value maps langCode → translated label. */
+  labelTranslations: Record<string, Record<string, string>>;
 };

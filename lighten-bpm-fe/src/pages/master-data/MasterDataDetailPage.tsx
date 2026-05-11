@@ -88,6 +88,11 @@ export const MasterDataDetailPage = () => {
   const fields = dataset?.fields ?? [];
   const primaryKey = dataset?.primaryKey ?? "";
   const isExternalApiDataset = dataset?.source_type === "EXTERNAL_API";
+  const isSystemDataset = dataset?.created_by === "SYSTEM";
+  const isEditableSystemDataset =
+    code === "ORG_UNIT_TRANSLATIONS" || code === "ORG_MEMBERSHIPS";
+  const isReadOnlyDataset =
+    isExternalApiDataset || (isSystemDataset && !isEditableSystemDataset);
   const fieldNames = useMemo(() => fields.map((f) => f.name), [fields]);
 
   const renameDataset = useRenameDataset(code ?? "");
@@ -406,10 +411,12 @@ export const MasterDataDetailPage = () => {
               </span>
               <button
                 onClick={() => {
+                  if (isSystemDataset) return;
                   setEditName(dataset.name);
                   setIsEditingName(true);
                 }}
-                className="text-secondary-text hover:text-primary-text cursor-pointer"
+                disabled={isSystemDataset}
+                className="text-secondary-text hover:text-primary-text cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Pencil className="h-5 w-5" />
               </button>
@@ -427,7 +434,7 @@ export const MasterDataDetailPage = () => {
             <Button
               variant="destructive"
               onClick={handleDeleteSelected}
-              disabled={isExternalApiDataset}
+              disabled={isReadOnlyDataset}
             >
               {t("master_data.delete")} ({selectedKeys.size})
             </Button>
@@ -437,7 +444,7 @@ export const MasterDataDetailPage = () => {
             icon={<ImportIcon className="h-5 w-5" />}
             className="bg-white cursor-pointer"
             onClick={openImportCsv}
-            disabled={isExternalApiDataset}
+            disabled={isReadOnlyDataset}
           >
             {t("master_data.import_csv")}
           </Button>
@@ -459,7 +466,7 @@ export const MasterDataDetailPage = () => {
           )}
           <Button
             onClick={handleSave}
-            disabled={!hasChanges || isSaving || isExternalApiDataset}
+            disabled={!hasChanges || isSaving || isReadOnlyDataset}
             loading={isSaving}
           >
             {t("master_data.save")}
@@ -484,7 +491,7 @@ export const MasterDataDetailPage = () => {
                           selectedKeys.size === sortedRecords.length
                         }
                         onChange={toggleSelectAll}
-                        disabled={isExternalApiDataset}
+                        disabled={isReadOnlyDataset}
                         className="h-4 w-4 rounded border-gray-300"
                       />
                     </div>
@@ -512,7 +519,7 @@ export const MasterDataDetailPage = () => {
                   ))}
                   {/* Add column button */}
                   <th className="w-12 border-l border-stroke px-3 py-3">
-                    {!isExternalApiDataset && (
+                    {!isReadOnlyDataset && !isSystemDataset && (
                       <button
                         onClick={() => setShowAddColumn(true)}
                         className="rounded p-0.5 text-lighten-blue hover:bg-gray-100"
@@ -560,7 +567,7 @@ export const MasterDataDetailPage = () => {
                             type="checkbox"
                             checked={selectedKeys.has(stableIndex)}
                             onChange={() => toggleSelectRow(stableIndex)}
-                            disabled={isExternalApiDataset}
+                            disabled={isReadOnlyDataset}
                             className="h-4 w-4 rounded border-gray-300"
                           />
                         </div>
@@ -576,7 +583,7 @@ export const MasterDataDetailPage = () => {
                             onChange={(val) =>
                               handleCellChange(record, field.name, val)
                             }
-                            readOnly={isExternalApiDataset}
+                            readOnly={isReadOnlyDataset}
                           />
                         </td>
                       ))}
@@ -588,7 +595,7 @@ export const MasterDataDetailPage = () => {
             </table>
 
             {/* Add new row inside the card */}
-            {!isExternalApiDataset && (
+            {!isReadOnlyDataset && (
               <div className="border-t border-dashed border-gray-200 px-6 py-3">
                 <button
                   onClick={handleAddRow}
@@ -603,7 +610,7 @@ export const MasterDataDetailPage = () => {
         </div>
       </div>
 
-      {showAddColumn && !isExternalApiDataset && (
+      {showAddColumn && !isReadOnlyDataset && !isSystemDataset && (
         <ColumnConfigPanel
           initialColumns={fields}
           title={dataset.name}

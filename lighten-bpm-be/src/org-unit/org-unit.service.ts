@@ -88,7 +88,11 @@ export class OrgUnitService {
         },
       );
 
-      return OrgUnitDto.fromPrisma(orgUnit as OrgUnitWithRelations);
+      const hydratedOrgUnit =
+        await this.orgUnitRepository.findOrgUnitByIdIncludingDeleted(
+          orgUnit!.id,
+        );
+      return OrgUnitDto.fromPrisma(hydratedOrgUnit as OrgUnitWithRelations);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2003') {
@@ -151,7 +155,10 @@ export class OrgUnitService {
       id,
       updateOrgUnitDto,
     );
-    return OrgUnitDto.fromPrisma(orgUnit);
+    const hydratedOrgUnit = await this.orgUnitRepository.findOrgUnitById(
+      orgUnit.id,
+    );
+    return OrgUnitDto.fromPrisma(hydratedOrgUnit ?? orgUnit);
   }
 
   async remove(id: number): Promise<OrgUnitDto> {
@@ -181,7 +188,10 @@ export class OrgUnitService {
       code,
       updateOrgUnitDto,
     );
-    return OrgUnitDto.fromPrisma(orgUnit);
+    const hydratedOrgUnit = await this.orgUnitRepository.findOrgUnitById(
+      orgUnit.id,
+    );
+    return OrgUnitDto.fromPrisma(hydratedOrgUnit ?? orgUnit);
   }
 
   async removeByCode(code: string): Promise<OrgUnitDto> {

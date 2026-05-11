@@ -15,9 +15,19 @@ export type OrgUnitMemberUser = User & {
   default_org_preference?: (UserDefaultOrg & { org_unit: OrgUnit }) | null;
 };
 
+export type OrgUnitTranslation = {
+  id: number;
+  org_unit_id: number;
+  lang: string;
+  name: string;
+  created_at?: Date;
+  updated_at?: Date;
+};
+
 export type OrgUnitWithRelations = OrgUnit & {
   parent?: OrgUnitWithRelations | null;
   children?: OrgUnitWithRelations[];
+  translations?: OrgUnitTranslation[];
   members?: (OrgMembership & { user: OrgUnitMemberUser })[];
 };
 

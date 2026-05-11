@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { FormList } from "@/components/list/form-list";
 
 export function FormListPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string>("all");
@@ -87,12 +89,15 @@ export function FormListPage() {
               required: false,
               validators: [],
             },
+            defaultLang: data.defaultLang,
+            translationLangs: [],
+            labelTranslations: {},
           });
         }}
       />
       <div className="flex flex-row justify-between">
         <h1 className="text-2xl font-semibold text-[#111928] mb-6">
-          Form Management
+          {t("form_list.title")}
         </h1>
         <div className="flex gap-2">
           <Button
@@ -101,11 +106,11 @@ export function FormListPage() {
             className="px-6 h-11 bg-white"
             onClick={openImport}
           >
-            <span className="text-base">Import</span>
+            <span className="text-base">{t("form_list.import")}</span>
           </Button>
           <Button onClick={open} className="px-6 w-[156px] h-11">
             <CirclePlusIcon className="w-5 h-5" />
-            <span className="text-base">New Form</span>
+            <span className="text-base">{t("form_list.new_form")}</span>
           </Button>
         </div>
       </div>
@@ -114,7 +119,7 @@ export function FormListPage() {
         <div className="relative w-full md:w-[304px]">
           <Input
             type="text"
-            placeholder="Search here..."
+            placeholder={t("form_list.search_placeholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-11 text-sm border-[#DFE4EA] rounded-lg"

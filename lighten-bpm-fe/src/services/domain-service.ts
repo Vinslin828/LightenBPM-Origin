@@ -276,7 +276,14 @@ export class DomainService implements IDomainService {
 
   async getForm(formId: string): Promise<ApiResponse<FormDefinition>> {
     const result = await apiCaller.get(`/form/${formId}`);
+    console.log("[getForm] raw revision.validation:", result.data?.revision?.validation);
     const form = formSchema.transform(tFormSchema).parse(result.data);
+    console.log("[getForm] parsed form:", {
+      revisionId: form.revisionId,
+      defaultLang: form.defaultLang,
+      translationLangs: form.translationLangs,
+      labelTranslationCount: Object.keys(form.labelTranslations ?? {}).length,
+    });
     return {
       success: !!form,
       data: form,
@@ -307,7 +314,12 @@ export class DomainService implements IDomainService {
       description: form.description,
       is_template: false,
       tags: form.tags.map((tag) => Number(tag.id)),
-      validation: form.validation,
+      validation: {
+        ...form.validation,
+        defaultLang: form.defaultLang,
+        translationLangs: form.translationLangs,
+        labelTranslations: form.labelTranslations,
+      },
     } satisfies CreateFormRequest;
     const createResult = await apiCaller.post("/form", createPayload);
     const parsedCreateResult = formSchema
@@ -349,7 +361,12 @@ export class DomainService implements IDomainService {
       description: form.description,
       status: "ACTIVE",
       tags: form.tags.map((tag) => Number(tag.id)),
-      validation: form.validation,
+      validation: {
+        ...form.validation,
+        defaultLang: form.defaultLang,
+        translationLangs: form.translationLangs,
+        labelTranslations: form.labelTranslations,
+      },
     } satisfies UpdateFormRequest;
 
     const result = await apiCaller.post(`/form/${form.id}/revisions`, data);
@@ -1259,11 +1276,13 @@ export class DomainService implements IDomainService {
   async createOrgUnit(data: {
     code: string;
     name: string;
+    nameTranslations?: Record<string, string>;
     parentCode?: string;
   }): Promise<ApiResponse<Unit>> {
     const result = await apiCaller.post("/org-units", {
       code: data.code,
       name: data.name,
+      nameTranslations: data.nameTranslations,
       type: "ORG_UNIT",
       parentCode: data.parentCode,
     });
@@ -1298,7 +1317,12 @@ export class DomainService implements IDomainService {
    */
   async updateOrgUnit(
     orgUnitId: string,
-    data: { name?: string; code?: string; parentCode?: string | null },
+    data: {
+      name?: string;
+      code?: string;
+      nameTranslations?: Record<string, string>;
+      parentCode?: string | null;
+    },
   ): Promise<ApiResponse<Unit>> {
     const result = await apiCaller.patch(`/org-units/${orgUnitId}`, data);
     const parsedResult = orgUnitSchema.parse(result.data);

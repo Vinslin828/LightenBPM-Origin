@@ -20,7 +20,12 @@ import {
   getFieldNameByIdentifier as getFieldNameByIdentifierFromSchema,
   toNameKeyedFormData as toNameKeyedFormDataFromSchema,
 } from "./utils";
-import { MasterDataQuery, useCallExternalApi, useOrgById, useUser } from "../useMasterData";
+import {
+  MasterDataQuery,
+  useCallExternalApi,
+  useOrgById,
+  useUser,
+} from "../useMasterData";
 
 const DEFAULT_PAGE = 1;
 
@@ -326,10 +331,12 @@ export function useCodeHelper({
   );
 
   const compileReference = useCallback(
-    (referenceCode: string) =>
-      (
-        executeCode(`function() { return ${referenceCode};}`) as () => unknown
-      )(),
+    (referenceCode: string) => {
+      const result = executeCode(referenceCode);
+      return typeof result === "function"
+        ? (result as () => unknown)()
+        : result;
+    },
     [executeCode],
   );
 
@@ -352,7 +359,7 @@ export function useCodeHelper({
           value?: unknown;
           reference?: unknown;
         };
-        if (!ref.isReference || !!ref.value) {
+        if (!ref.isReference) {
           return input;
         }
         const expression =
@@ -372,7 +379,7 @@ export function useCodeHelper({
               ? JSON.stringify(result)
               : result;
           return {
-            isReference: true,
+            isReference: false,
             reference: expression,
             value: resolvedValue,
           };

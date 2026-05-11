@@ -353,7 +353,7 @@ model FormWorkflowBinding {
   created_by  Int
   created_at  DateTime @default(now())
   updated_by  Int
-  updated_at  DateTime @updatedAt
+    updated_at  DateTime @default(now()) @updatedAt
 
   @@map("form_workflow_bindings")
 
@@ -711,12 +711,27 @@ model OrgUnit {
   // Self-referencing relation for parent-child hierarchy
   parent            OrgUnit?         @relation("OrgUnitHierarchy", fields: [parent_id], references: [id])
   children          OrgUnit[]        @relation("OrgUnitHierarchy")
+  translations      OrgUnitTranslation[]
 
   // Relations
   preferred_by_users UserDefaultOrg[]
   members           OrgMembership[]
   creator           User?            @relation("OrgUnitCreator", fields: [created_by], references: [id])
   updater           User?            @relation("OrgUnitUpdater", fields: [updated_by], references: [id])
+}
+
+model OrgUnitTranslation {
+  id          Int      @id @default(autoincrement())
+  org_unit_id Int
+  lang        String
+  name        String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  org_unit    OrgUnit  @relation(fields: [org_unit_id], references: [id], onDelete: Cascade)
+
+  @@unique([org_unit_id, lang])
+  @@map("org_unit_translations")
 }
 
 // User Default Organization Preference Mapping

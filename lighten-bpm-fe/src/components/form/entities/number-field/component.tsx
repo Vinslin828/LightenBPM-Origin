@@ -8,6 +8,7 @@ import { createEntityComponent } from "@coltorapps/builder-react";
 import { numberFieldEntity } from "./definition";
 import { useRefWithErrorFocus } from "@/utils/error-focus";
 import { useFieldValidationState } from "@/hooks/useFieldValidationState";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 
 export const NumberFieldEntity = createEntityComponent(
   numberFieldEntity,
@@ -16,6 +17,11 @@ export const NumberFieldEntity = createEntityComponent(
     const [touched, setTouched] = useState(false);
 
     const inputRef = useRefWithErrorFocus<HTMLInputElement>(props.entity.error);
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      props.entity.attributes.name,
+    );
 
     const { localError, isValidating, validateAndCommit, setLocalError } =
       useFieldValidationState(props.entity.id);
@@ -124,9 +130,7 @@ export const NumberFieldEntity = createEntityComponent(
     return (
       <div className="w-full">
         <Label htmlFor={id} aria-required={props.entity.attributes.required}>
-          {!!props.entity.attributes.label.value
-            ? props.entity.attributes.label.value
-            : props.entity.attributes.name}
+          {label}
         </Label>
         <Input
           ref={inputRef}

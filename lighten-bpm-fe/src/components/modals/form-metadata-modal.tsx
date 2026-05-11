@@ -7,14 +7,23 @@ import { FormDefinition, Tag } from "@/types/domain";
 import DepartmentSelect from "@ui/select/tag-select";
 import { Label } from "@ui/label";
 import { useTranslation } from "react-i18next";
+import { SingleSelect } from "@ui/select/single-select";
+
+const SUPPORTED_LANGUAGES = [
+  { key: "en", value: "en", label: "English" },
+  { key: "zh-TW", value: "zh-TW", label: "繁體中文" },
+  { key: "zh-CN", value: "zh-CN", label: "简体中文" },
+];
+
+type FormModalData = Pick<FormDefinition, "name" | "description" | "tags"> & {
+  defaultLang: string;
+};
 
 type FormModalProps = {
   isOpen: boolean;
   close: () => void;
-  onSubmit?: (
-    data: Pick<FormDefinition, "name" | "description" | "tags">,
-  ) => void;
-  initialData?: Pick<FormDefinition, "name" | "description" | "tags">;
+  onSubmit?: (data: FormModalData) => void;
+  initialData?: Partial<FormModalData>;
   isEdit?: boolean;
 };
 
@@ -25,24 +34,21 @@ function FormModal({
   initialData,
   isEdit = false,
 }: FormModalProps) {
-  const { t } = useTranslation();
-  const [formData, setFormData] = useState<
-    Pick<FormDefinition, "name" | "description" | "tags">
-  >(
-    initialData || {
-      name: "",
-      tags: [
-        {
-          id: "",
+  const { t, i18n } = useTranslation();
+  const [formData, setFormData] = useState<FormModalData>(
+    initialData
+      ? {
+          name: initialData.name ?? "",
+          tags: initialData.tags ?? [],
+          description: initialData.description ?? "",
+          defaultLang: initialData.defaultLang ?? i18n.language ?? "en",
+        }
+      : {
           name: "",
+          tags: [],
           description: "",
-          abbrev: "",
-          createdAt: "",
-          createdBy: "",
+          defaultLang: i18n.language ?? "en",
         },
-      ],
-      description: "",
-    },
   );
   const [errors, setErrors] = useState<{
     name?: string;
@@ -53,15 +59,23 @@ function FormModal({
   useEffect(() => {
     if (isOpen) {
       setFormData(
-        initialData || {
-          name: "",
-          tags: [],
-          description: "",
-        },
+        initialData
+          ? {
+              name: initialData.name ?? "",
+              tags: initialData.tags ?? [],
+              description: initialData.description ?? "",
+              defaultLang: initialData.defaultLang ?? i18n.language ?? "en",
+            }
+          : {
+              name: "",
+              tags: [],
+              description: "",
+              defaultLang: i18n.language ?? "en",
+            },
       );
       setErrors({});
     }
-  }, [initialData, isOpen]);
+  }, [initialData, isOpen, i18n.language]);
 
   const validate = () => {
     const newErrors: { name?: string; tags?: string; description?: string } =
@@ -160,6 +174,17 @@ function FormModal({
             {errors.description && (
               <p className="text-red text-xs mt-1">{errors.description}</p>
             )}
+          </div>
+
+          <div>
+            <Label aria-required>{t("form_builder.default_lang")}</Label>
+            <SingleSelect
+              value={formData.defaultLang}
+              options={SUPPORTED_LANGUAGES}
+              onChange={(value) =>
+                setFormData((prev) => ({ ...prev, defaultLang: value ?? "en" }))
+              }
+            />
           </div>
         </div>
 

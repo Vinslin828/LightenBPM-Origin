@@ -7,9 +7,7 @@ import { useTranslation } from "react-i18next";
 import { FormDefinition, User } from "@/types/domain";
 import { InterpreterStoreData, Schema } from "@coltorapps/builder";
 import { basicFormBuilder } from "../form/builder/definition";
-import { entitiesComponents } from "@/const/form-builder";
 import useValidatorStore from "@/hooks/useValidatorStore";
-import { ZodError } from "zod";
 import { useToast } from "./toast";
 import {
   Dispatch,
@@ -30,6 +28,14 @@ import {
   userAtom,
 } from "@/store";
 import UserSelect from "./select/user-select";
+import {
+  createVisibleEntityComponents,
+  getHiddenEntityIds,
+} from "@/utils/form-visibility";
+import {
+  buildZodErrors,
+  getDynamicRequiredErrors,
+} from "@/utils/dynamic-status-validation";
 
 type Props = {
   form: Partial<FormDefinition>;
@@ -50,7 +56,8 @@ type Props = {
   onApplicantChange?: (user: User | null) => void;
 };
 /**
- * This form will check the passed-in schema and remove all the component that has (hide: true) attribute
+ * Hidden fields stay in the interpreter schema so expressions and datasource
+ * filters can still reference their values, but they are skipped at render time.
  *
  */
 export default function ApplicationForm({
@@ -77,89 +84,31 @@ export default function ApplicationForm({
   const stableInitialData = useMemo(() => initialData ?? {}, [initialData]);
   const currentUser = useAtomValue(userAtom);
   const [isValidating, setIsValidating] = useState(false);
-  const [selectedApplicant, setSelectedApplicant] = useAtom(selectedApplicantAtom)
+  const [selectedApplicant, setSelectedApplicant] = useAtom(
+    selectedApplicantAtom,
+  );
 
-  const visibleFormSchema = useMemo(() => {
-    const entities = formSchema?.entities ?? {};
-    const root = formSchema?.root ?? [];
-    const hiddenEntityIds = new Set<string>();
+  const hiddenEntityIds = useMemo(
+    () => getHiddenEntityIds(formSchema),
+    [formSchema],
+  );
 
-    Object.entries(entities).forEach(([entityId, entity]) => {
-      const attributes = (entity?.attributes ?? {}) as Record<string, unknown>;
-      if (attributes.hide === true) {
-        hiddenEntityIds.add(entityId);
-      }
-    });
-
-    let changed = true;
-    while (changed) {
-      changed = false;
-      Object.entries(entities).forEach(([entityId, entity]) => {
-        const parentId = (entity as { parentId?: string }).parentId;
-        if (
-          parentId &&
-          hiddenEntityIds.has(parentId) &&
-          !hiddenEntityIds.has(entityId)
-        ) {
-          hiddenEntityIds.add(entityId);
-          changed = true;
-        }
-      });
-    }
-
-    if (hiddenEntityIds.size === 0) {
-      return formSchema;
-    }
-
-    const nextEntities = Object.fromEntries(
-      Object.entries(entities).filter(([entityId]) => !hiddenEntityIds.has(entityId)),
-    );
-    const nextRoot = root.filter((entityId) => !hiddenEntityIds.has(entityId));
-
-    // Remove dangling child references from remaining entities.
-    Object.values(nextEntities).forEach((entity) => {
-      const mutableEntity = entity as {
-        children?: string[];
-        attributes?: Record<string, unknown>;
-      };
-
-      if (Array.isArray(mutableEntity.children)) {
-        mutableEntity.children = mutableEntity.children.filter(
-          (childId) => childId in nextEntities,
-        );
-      }
-
-      const attributes = mutableEntity.attributes;
-      if (attributes && typeof attributes === "object") {
-        const slotMapping = attributes.slotMapping;
-        if (slotMapping && typeof slotMapping === "object") {
-          attributes.slotMapping = Object.fromEntries(
-            Object.entries(slotMapping as Record<string, unknown>).filter(
-              ([childId]) => childId in nextEntities,
-            ),
-          );
-        }
-      }
-    });
-
-    return {
-      ...formSchema,
-      entities: nextEntities,
-      root: nextRoot,
-    };
-  }, [formSchema]);
+  const renderableEntityComponents = useMemo(
+    () => createVisibleEntityComponents(hiddenEntityIds),
+    [hiddenEntityIds],
+  );
 
   const setIStore = useSetAtom(interpreterStoreAtom);
   const setRuntimeApplication = useSetAtom(runtimeApplicationAtom);
   const isBusy = isSubmitting || isValidating;
 
-  const { getCompiledSchema } = useCodeHelper({
-    formSchema: visibleFormSchema,
+  const { getCompiledSchema, executeCode } = useCodeHelper({
+    formSchema,
     formData: stableInitialData,
     application,
   });
   const { cache: expressionMasterDataCache } =
-    usePreloadMasterDataForExpressions(visibleFormSchema);
+    usePreloadMasterDataForExpressions(formSchema);
 
   const compiledSchema = useMemo(
     () => getCompiledSchema(),
@@ -193,7 +142,7 @@ export default function ApplicationForm({
 
   useEffect(() => {
     setSelectedApplicant(currentUser);
-  }, [setSelectedApplicant, currentUser])
+  }, [setSelectedApplicant, currentUser]);
 
   useEffect(() => {
     if (initialDataRef.current === null) {
@@ -234,27 +183,24 @@ export default function ApplicationForm({
       );
       const localErrors = await executeAllLocalValidator(data.entitiesValues);
       const formErrors = await executeFormValidator();
+      const dynamicRequiredErrors = getDynamicRequiredErrors({
+        schema: interpreterStore.schema,
+        values: data.entitiesValues,
+        executeCode,
+      });
 
       console.debug({ localErrors });
 
       const mergedErrors: Record<string, string> = {
         ...localErrors,
         ...registryErrors,
+        ...dynamicRequiredErrors,
       };
       const hasEntityErrors = Object.keys(mergedErrors).length > 0;
       const hasFormErrors = Object.keys(formErrors).length > 0;
 
       if (hasEntityErrors) {
-        const entitiesErrors = Object.entries(mergedErrors).reduce(
-          (acc, [entityId, message]) => {
-            acc[entityId] = new ZodError([
-              { code: "custom", message, path: [] },
-            ]);
-            return acc;
-          },
-          {} as Record<string, ZodError>,
-        );
-        interpreterStore.setEntitiesErrors(entitiesErrors);
+        interpreterStore.setEntitiesErrors(buildZodErrors(mergedErrors));
       }
 
       if (hasFormErrors) {
@@ -350,7 +296,7 @@ export default function ApplicationForm({
       >
         <InterpreterEntities
           interpreterStore={interpreterStore}
-          components={entitiesComponents}
+          components={renderableEntityComponents}
         />
         <div className="flex pt-4 gap-3 justify-between flex-col md:flex-row">
           <div className="flex flex-row justify-between w-full gap-3">

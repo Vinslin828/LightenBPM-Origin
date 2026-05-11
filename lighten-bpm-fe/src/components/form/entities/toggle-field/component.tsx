@@ -4,19 +4,28 @@ import { formatError, ValidationError } from "@/components/ui/validation-error";
 import { createEntityComponent } from "@coltorapps/builder-react";
 import { toggleFieldEntity } from "./definition";
 import { useFieldValidationState } from "@/hooks/useFieldValidationState";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 
 export const ToggleFieldEntity = createEntityComponent(
   toggleFieldEntity,
   function ToggleFieldEntity(props) {
     const { localError, isValidating, validateAndCommit } =
       useFieldValidationState(props.entity.id);
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      props.entity.attributes.name,
+    );
 
     const errorMessage =
       localError ||
       formatError(props.entity.value, props.entity.error)?._errors?.[0];
 
     const handleValidation = async (pressed?: boolean) => {
-      if (props.entity.attributes.readonly || props.entity.attributes.disabled) {
+      if (
+        props.entity.attributes.readonly ||
+        props.entity.attributes.disabled
+      ) {
         return;
       }
       await validateAndCommit({
@@ -49,9 +58,7 @@ export const ToggleFieldEntity = createEntityComponent(
           aria-required={props.entity.attributes.required}
           className="block mb-2"
         >
-          {!!props.entity.attributes.label.value
-            ? props.entity.attributes.label.value
-            : props.entity.attributes.name}
+          {label}
         </Label>
         <Toggle
           pressed={
@@ -80,7 +87,9 @@ export const ToggleFieldEntity = createEntityComponent(
           className={errorMessage ? "border-red-500" : ""}
         />
         {isValidating ? (
-          <p className="text-sm mt-1 text-secondary-text">Running validation...</p>
+          <p className="text-sm mt-1 text-secondary-text">
+            Running validation...
+          </p>
         ) : errorMessage ? (
           <ValidationError>{errorMessage}</ValidationError>
         ) : null}

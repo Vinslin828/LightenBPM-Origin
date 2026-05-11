@@ -8,6 +8,7 @@ import { createEntityComponent } from "@coltorapps/builder-react";
 import { textFieldEntity } from "./definition";
 import { useRefWithErrorFocus } from "@/utils/error-focus";
 import { useFieldValidationState } from "@/hooks/useFieldValidationState";
+import { useEntityLabel } from "@/hooks/useEntityLabel";
 import { cn } from "@/utils/cn";
 import { HideIcon } from "@/components/icons";
 
@@ -18,6 +19,11 @@ export const TextFieldEntity = createEntityComponent(
     const { localError, isValidating, validateAndCommit } =
       useFieldValidationState(props.entity.id);
     const inputRef = useRefWithErrorFocus<HTMLInputElement>(props.entity.error);
+    const label = useEntityLabel(
+      props.entity.id,
+      props.entity.attributes.label.value || props.entity.attributes.name,
+      props.entity.attributes.name,
+    );
 
     const handleValidation = async (nextValue?: string) => {
       await validateAndCommit({
@@ -43,7 +49,14 @@ export const TextFieldEntity = createEntityComponent(
         typeof defaultValueAttr === "object" &&
         "value" in defaultValueAttr
       ) {
-        const value = (defaultValueAttr as { value?: unknown }).value;
+        const defaultValueRecord = defaultValueAttr as {
+          isReference?: boolean;
+          value?: unknown;
+        };
+        if (defaultValueRecord.isReference) {
+          return "";
+        }
+        const value = defaultValueRecord.value;
         if (value === undefined || value === null) {
           return "";
         }
@@ -73,9 +86,7 @@ export const TextFieldEntity = createEntityComponent(
     return (
       <div className={cn("w-full")}>
         <Label htmlFor={id} aria-required={props.entity.attributes.required}>
-          {!!props.entity.attributes.label.value
-            ? props.entity.attributes.label.value
-            : props.entity.attributes.name}
+          {label}
         </Label>
 
         <Input

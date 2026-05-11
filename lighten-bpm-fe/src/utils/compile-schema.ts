@@ -9,19 +9,30 @@ export default function compileSchema(
     if (!input || typeof input !== "object" || !("isReference" in input)) {
       return input;
     }
-    const ref = input as { isReference?: boolean; value?: unknown };
-    if (!ref.isReference || typeof ref.value !== "string") {
+    const ref = input as {
+      isReference?: boolean;
+      value?: unknown;
+      reference?: unknown;
+    };
+    if (!ref.isReference) {
       return input;
     }
-    const expression = ref.value.trim();
+    const expression =
+      typeof ref.reference === "string"
+        ? ref.reference.trim()
+        : typeof ref.value === "string"
+          ? ref.value.trim()
+          : "";
     if (!expression) {
       return { isReference: false, value: undefined };
     }
     try {
-      const result = compileReference(expression);
+      const rawResult = compileReference(expression);
+      const result = typeof rawResult === "function" ? rawResult() : rawResult;
       console.debug({ result });
       return {
         isReference: false,
+        reference: expression,
         value: !!result ? String(result) : result,
       };
     } catch (error) {

@@ -20,7 +20,6 @@ import {
   useInterpreterStore,
 } from "@coltorapps/builder-react";
 import { basicFormBuilder } from "@/components/form/builder/definition";
-import { entitiesComponents } from "@/const/form-builder";
 import { FormStatus } from "@/types/form-builder";
 import CancelModal from "@/components/modals/cancel-modal";
 import { parseFormData } from "@/utils/parser";
@@ -36,12 +35,19 @@ import {
 import ReadonlyForm from "@/components/ReadonlyForm";
 import useValidatorStore from "@/hooks/useValidatorStore";
 import { useCodeHelper } from "@/hooks/useCode/useCodeHelper";
-import { ZodError } from "zod";
 import ApplicationPanelTab from "@/components/tabs/application-panel-tab";
 import {
   useApplicationShares,
   useWorkflowPermissions,
 } from "@/hooks/usePermissions";
+import {
+  createVisibleEntityComponents,
+  getHiddenEntityIds,
+} from "@/utils/form-visibility";
+import {
+  buildZodErrors,
+  getDynamicRequiredErrors,
+} from "@/utils/dynamic-status-validation";
 
 export default function ApplicationDetailPage() {
   const { applicationId } = useParams<{ applicationId: string }>();
@@ -67,13 +73,14 @@ export default function ApplicationDetailPage() {
   const [, setFormSetting] = useAtom(formSettingAtom);
 
   useEffect(() => {
+    const form = application?.formInstance.form;
     setFormSetting({
-      validation: application?.formInstance.form.validation ?? {
-        required: false,
-        validators: [],
-      },
+      validation: form?.validation ?? { required: false, validators: [] },
+      defaultLang: form?.defaultLang ?? "en",
+      translationLangs: form?.translationLangs ?? [],
+      labelTranslations: form?.labelTranslations ?? {},
     });
-  }, [setFormSetting, application?.formInstance.form.validation]);
+  }, [setFormSetting, application?.formInstance.form]);
 
   useEffect(() => {
     setSidebarCollapsed(true);
@@ -177,6 +184,14 @@ function ApplicationDetail({
     basicFormBuilder,
     application.formInstance.form.schema,
   );
+  const hiddenEntityIds = useMemo(
+    () => getHiddenEntityIds(application.formInstance.form.schema),
+    [application.formInstance.form.schema],
+  );
+  const renderableEntityComponents = useMemo(
+    () => createVisibleEntityComponents(hiddenEntityIds),
+    [hiddenEntityIds],
+  );
   useEffect(() => {
     setIStore((prev) => (prev === interpreterStore ? prev : interpreterStore));
   }, [interpreterStore, setIStore]);
@@ -211,6 +226,11 @@ function ApplicationDetail({
     });
   const { executeAllRegistry: executeFormValidator, initiateValidatorStore } =
     useValidatorStore();
+  const { executeCode } = useCodeHelper({
+    formSchema: application.formInstance.form.schema,
+    formData: application.formInstance.data ?? {},
+    application,
+  });
 
   const { mutate: updateApplication, isPending: isUpdating } =
     useUpdateApplication({
@@ -266,18 +286,21 @@ function ApplicationDetail({
     const result = await interpreterStore.validateEntitiesValues();
 
     const data = interpreterStore.getData();
-    const validatorErrors = executeFormValidator(
+    const validatorErrors = await executeFormValidator(
       data.entitiesValues,
       interpreterStore.schema,
     );
-    const hasValidatorErrors = Object.keys(validatorErrors).length > 0;
-    const entitiesErrors = Object.entries(validatorErrors).reduce(
-      (acc, [entityId, message]) => {
-        acc[entityId] = new ZodError([{ code: "custom", message, path: [] }]);
-        return acc;
-      },
-      {} as Record<string, ZodError>,
-    );
+    const dynamicRequiredErrors = getDynamicRequiredErrors({
+      schema: interpreterStore.schema,
+      values: data.entitiesValues,
+      executeCode,
+    });
+    const mergedErrors = {
+      ...validatorErrors,
+      ...dynamicRequiredErrors,
+    };
+    const hasValidatorErrors = Object.keys(mergedErrors).length > 0;
+    const entitiesErrors = buildZodErrors(mergedErrors);
     if (hasValidatorErrors) {
       interpreterStore.setEntitiesErrors(entitiesErrors);
     }
@@ -512,7 +535,7 @@ function ApplicationDetail({
                 ) : (
                   <InterpreterEntities
                     interpreterStore={interpreterStore}
-                    components={entitiesComponents}
+                    components={renderableEntityComponents}
                   />
                 )}
                 {application.overallStatus !== OverallStatus.Canceled &&

@@ -8,7 +8,6 @@ import {
 } from "@/types/flow";
 import AttributePanelHeader from "../../attribute-panel-header";
 import { ApprovalIcon, ApproveIcon } from "@/components/icons";
-import { Textarea } from "@ui/textarea";
 import { Input } from "@ui/input";
 import { useTranslation } from "react-i18next";
 import { approverTypeOptions } from "@/const/flow";
@@ -33,7 +32,9 @@ type Props = {
 
 type UserRefType = "manual" | "reference";
 const approverPrefix = "approver_type";
-const defaultUserReferenceExpression = `function expression(){\n  // must return an arayy of user id (number array).\n  return getFormField("field_name").value?.map((v)=>Number(v));\n}`;
+const defaultUserReferenceExpression = `function expression(){\n  // must return an array of user ids (number array).\n  return getFormField("field_name").value?.map((v)=>Number(v));\n}`;
+const defaultReportingLineUserReferenceExpression = `function expression(){\n  // must return one user id (number).\n  return Number(getFormField("field_name").value);\n}`;
+const defaultOrgReferenceExpression = `function expression(){\n  // return the selected organization id or organization code from the form.\n  return getFormField("org_field_name").value;\n}`;
 
 function getUserRefType(
   specificUser: ApprovalNodeType["data"]["specificUser"] | undefined,
@@ -119,6 +120,34 @@ export function SharedApprovalAttributes({
     });
   };
 
+  const handleReportingLineUserRefTypeChange = (type: UserRefType) => {
+    if (type === "manual") {
+      onChange({
+        specificUser: {
+          type: "manual",
+          userId: "",
+        },
+      });
+      return;
+    }
+
+    const refSource = data?.specificUser as
+      | { type: "reference"; reference?: string; userId?: string }
+      | undefined;
+    const referenceValue =
+      refSource?.type === "reference"
+        ? (refSource.reference ?? refSource.userId ?? "")
+        : "";
+
+    onChange({
+      specificUser: {
+        type: "reference",
+        userId: referenceValue,
+        reference: referenceValue,
+      },
+    });
+  };
+
   const approveMethodName = controlId
     ? `${controlId}-approveMethod`
     : `approveMethod-${data?.approver}`;
@@ -130,6 +159,10 @@ export function SharedApprovalAttributes({
     specificUserReference.trim().length > 0
       ? specificUserReference
       : defaultUserReferenceExpression;
+  const initialReportingLineUserReferenceCode =
+    specificUserReference.trim().length > 0
+      ? specificUserReference
+      : defaultReportingLineUserReferenceExpression;
 
   function renderSubmenu(type?: ApproverType) {
     switch (type) {
@@ -173,18 +206,18 @@ export function SharedApprovalAttributes({
                     <div className="font-medium">
                       {t("flow_attributes.approval.select_user")}
                     </div>
-                    {/* <CodeToggle
+                    <CodeToggle
                       value={
                         data.specificUser?.type === "reference"
                           ? "code"
                           : "manual"
                       }
                       onChange={(value) => {
-                        handleUserRefTypeChange(
+                        handleReportingLineUserRefTypeChange(
                           value === "code" ? "reference" : "manual",
                         );
                       }}
-                    /> */}
+                    />
                   </div>
                   <div className="flex flex-col space-y-2 w-full">
                     {userRefType === "manual" && (
@@ -216,12 +249,12 @@ export function SharedApprovalAttributes({
                         }
                       />
                     )}
-                    {/* {userRefType === "reference" && (
+                    {userRefType === "reference" && (
                       <CodeEditButton
                         variant="validation"
                         showApiToggle={false}
                         validationReturnType={"any"}
-                        value={initialUserReferenceCode}
+                        value={initialReportingLineUserReferenceCode}
                         formSchema={formData?.schema}
                         trigger={specificUserReference}
                         onSave={(reference) => {
@@ -234,7 +267,7 @@ export function SharedApprovalAttributes({
                           });
                         }}
                       />
-                    )} */}
+                    )}
                   </div>
                 </div>
               )}
@@ -306,7 +339,11 @@ export function SharedApprovalAttributes({
               </div>
             </div>
 
-            <AdvanceSetting />
+            <AdvanceSetting
+              value={data.advancedSetting ?? ""}
+              formData={formData}
+              onChange={(advancedSetting) => onChange({ advancedSetting })}
+            />
           </div>
         );
 
@@ -602,16 +639,41 @@ export function SharedApprovalAttributes({
   );
 }
 
-function AdvanceSetting() {
+function AdvanceSetting({
+  value,
+  formData,
+  onChange,
+}: {
+  value: string;
+  formData?: Partial<FormDefinition>;
+  onChange: (value: string) => void;
+}) {
   const { t } = useTranslation();
+  const initialCode =
+    value.trim().length > 0 ? value : defaultOrgReferenceExpression;
   return (
     <div className="flex flex-col">
       <div className="bg-white px-5 text-dark font-medium w-full h-[58px] flex items-center text-base">
         {t("flow_attributes.approval.advanced_settings")}
       </div>
       <div className="flex flex-col p-5 gap-3">
-        <div>{t("flow_attributes.approval.organization_reference_field")}</div>
-        <Textarea placeholder="fx" />
+        <div className="font-medium">
+          {t("flow_attributes.approval.organization_reference_field")}
+        </div>
+        <div className="text-sm text-secondary-text leading-5">
+          {t("flow_attributes.approval.organization_reference_field_helper")}
+        </div>
+        <div className="min-h-10.5 rounded-md border border-stroke bg-white px-3 py-2 flex items-center">
+          <CodeEditButton
+            variant="validation"
+            showApiToggle={false}
+            validationReturnType="any"
+            value={initialCode}
+            formSchema={formData?.schema}
+            trigger={value}
+            onSave={(reference) => onChange(reference)}
+          />
+        </div>
       </div>
     </div>
   );

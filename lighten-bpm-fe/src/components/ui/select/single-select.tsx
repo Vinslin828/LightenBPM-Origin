@@ -17,8 +17,10 @@ interface BaseProps<T extends string | number = string> {
   className?: string;
   disabled?: boolean;
   readonly?: boolean;
+  clearable?: boolean;
   name?: string;
   onBlur?: () => void;
+  onClear?: () => void;
 }
 
 export type SingleSelectProps<T extends string | number = string> =
@@ -32,12 +34,14 @@ function SingleSelectInner<T extends string | number = string>(
     value,
     disabled = false,
     readonly = false,
+    clearable = false,
     options = [],
     hasError = false,
     placeholder,
     className,
     name,
     onBlur,
+    onClear,
     onChange,
   }: SingleSelectProps<T>,
   ref: React.Ref<HTMLSelectElement>,
@@ -47,15 +51,19 @@ function SingleSelectInner<T extends string | number = string>(
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     if (readonly) return;
     const selected = e.target.value;
+    if (selected === "") {
+      onClear?.();
+      return;
+    }
     const typedValue =
       options.find((opt) => String(opt.value) === selected)?.value ??
       (selected as unknown as SelectOption<T>["value"]);
     onChange?.(typedValue);
   };
 
-  // A placeholder option that is disabled and has an empty value.
+  // A placeholder option with an empty value also works as a clear option.
   const placeholderOption = placeholder ? (
-    <option value="" disabled>
+    <option value="" disabled={!clearable}>
       {placeholder}
     </option>
   ) : null;

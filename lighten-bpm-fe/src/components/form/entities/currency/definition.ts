@@ -16,6 +16,7 @@ import { validatorAttribute } from "../../attributes/validator/definition";
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { allowCurrencyChangeAttribute } from "../../attributes/allow-currency-change/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const currencyFieldEntity = createEntity({
   name: EntityKey.currencyField,
@@ -35,6 +36,7 @@ export const currencyFieldEntity = createEntity({
     disabledAttribute,
     readonlyAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     // Value may be { value, currencyCode } object or plain number

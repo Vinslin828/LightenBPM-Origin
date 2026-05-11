@@ -32,14 +32,30 @@ export default function Validation(props: Props) {
         <span className="text-dark font-medium">Required</span>
         <Toggle
           pressed={validation.required}
-          onPressedChange={(value) =>
-            updateValidation({
-              ...validation,
-              required: value,
-            })
-          }
+          onPressedChange={(value) => {
+            // When enabling, auto-add a first validator if the list is empty
+            const validators =
+              value && validation.validators.length === 0
+                ? [
+                    {
+                      key: `validator_${Date.now()}`,
+                      listenFieldIds: [],
+                      code: undefined,
+                      description: undefined,
+                      errorMessage: undefined,
+                      isApi: false,
+                    },
+                  ]
+                : validation.validators;
+            updateValidation({ ...validation, required: value, validators });
+          }}
         />
       </div>
+      {validation.required && validation.validators.length === 0 && (
+        <div className="text-sm text-secondary-text text-center py-2">
+          Click <span className="font-semibold text-lighten-blue">+</span> to add a validator.
+        </div>
+      )}
       {validation.required &&
         validation.validators.map((validator, index) => (
           <ValidatorBlock

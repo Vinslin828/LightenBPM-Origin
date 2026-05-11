@@ -6,11 +6,14 @@ import { dump } from 'js-yaml';
 
 export function openApiDocumentBuilder() {
   return new DocumentBuilder()
-    .setTitle('GBPM API Definition')
-    .setDescription('The GBPM API for Business Process Management')
+    .setTitle('Lighten BPM API Definition')
+    .setDescription('The Lighten BPM API for Business Process Management')
     .setOpenAPIVersion('3.1.1')
     .setVersion('0.0.1')
-    .addServer('https://api.server.test/v1')
+    .addServer('http://localhost:3000', 'Local Development')
+    .addServer('https://api.server.test/v1', 'Production')
+    .addBearerAuth()
+    .addSecurityRequirements('bearer')
     .build();
 }
 

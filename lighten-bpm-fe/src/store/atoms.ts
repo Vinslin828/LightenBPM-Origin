@@ -74,6 +74,9 @@ export const formSettingAtom = atom<FormSetting>({
     required: false,
     validators: [],
   },
+  defaultLang: "en",
+  translationLangs: [],
+  labelTranslations: {},
 });
 
 // Attachment draft ID for file uploads during form filling

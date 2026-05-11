@@ -1,4 +1,4 @@
-import { ReactNode, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, EyeIcon, XIcon } from "lucide-react";
 
 import {
@@ -21,8 +21,18 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/tabs";
-import { entitiesComponents } from "@/const/form-builder";
 import { useToast } from "@ui/toast";
+import {
+  createVisibleEntityComponents,
+  getHiddenEntityIds,
+} from "@/utils/form-visibility";
+import {
+  buildZodErrors,
+  getDynamicRequiredErrors,
+} from "@/utils/dynamic-status-validation";
+import { useCodeHelper } from "@/hooks/useCode/useCodeHelper";
+import { useSetAtom } from "jotai";
+import { interpreterStoreAtom } from "@/store";
 
 function Form(props: {
   interpreterStore: InterpreterStore<typeof basicFormBuilder>;
@@ -30,11 +40,44 @@ function Form(props: {
   onValidationFail: () => void;
 }) {
   const { toast } = useToast();
+  const setIStore = useSetAtom(interpreterStoreAtom);
+  const hiddenEntityIds = useMemo(
+    () => getHiddenEntityIds(props.interpreterStore.schema),
+    [props.interpreterStore.schema],
+  );
+  const renderableEntityComponents = useMemo(
+    () => createVisibleEntityComponents(hiddenEntityIds),
+    [hiddenEntityIds],
+  );
+  const { executeCode } = useCodeHelper({
+    formSchema: props.interpreterStore.schema,
+    formData: {},
+  });
+
+  useEffect(() => {
+    setIStore((prev) =>
+      prev === props.interpreterStore ? prev : props.interpreterStore,
+    );
+  }, [props.interpreterStore, setIStore]);
 
   async function handleSubmit() {
     const result = await props.interpreterStore.validateEntitiesValues();
+    const data = props.interpreterStore.getData();
+    const dynamicRequiredErrors = getDynamicRequiredErrors({
+      schema: props.interpreterStore.schema,
+      values: data.entitiesValues,
+      executeCode,
+    });
+    const hasDynamicRequiredErrors =
+      Object.keys(dynamicRequiredErrors).length > 0;
 
-    if (result.success) {
+    if (hasDynamicRequiredErrors) {
+      props.interpreterStore.setEntitiesErrors(
+        buildZodErrors(dynamicRequiredErrors),
+      );
+    }
+
+    if (result.success && !hasDynamicRequiredErrors) {
       props.onSubmit();
 
       toast({
@@ -47,6 +90,16 @@ function Form(props: {
       });
     } else {
       props.onValidationFail();
+      toast({
+        variant: "destructive",
+        title: (
+          <span>
+            <AlertCircle className="text-destructive mr-2 inline" /> Validation
+            failed.
+          </span>
+        ),
+        description: "Please fill out the required fields.",
+      });
     }
   }
 
@@ -61,7 +114,7 @@ function Form(props: {
     >
       <InterpreterEntities
         interpreterStore={props.interpreterStore}
-        components={entitiesComponents}
+        components={renderableEntityComponents}
       />
       <div className="flex justify-end">
         <Button type="submit">Submit</Button>

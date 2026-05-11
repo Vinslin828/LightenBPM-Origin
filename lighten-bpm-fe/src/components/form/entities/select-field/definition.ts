@@ -15,6 +15,7 @@ import { readonlyAttribute } from "../../attributes/readonly/definition";
 import { validatorAttribute } from "../../attributes/validator/definition";
 import { disabledAttribute } from "../../attributes/disabled/definition";
 import { hideAttribute } from "../../attributes/hide/definition";
+import { dynamicStatusAttribute } from "../../attributes/dynamic-status/definition";
 
 export const selectFieldEntity = createEntity({
   name: EntityKey.selectField,
@@ -31,6 +32,7 @@ export const selectFieldEntity = createEntity({
     validatorAttribute,
     disabledAttribute,
     hideAttribute,
+    dynamicStatusAttribute,
   ],
   validate(value, context) {
     const schema = z.union([z.string().min(1), z.array(z.string()).min(1)]);
@@ -46,7 +48,10 @@ export const selectFieldEntity = createEntity({
   },
   defaultValue(context) {
     const datasource = context.entity.attributes.datasourceType as
-      | { type?: string; defaultValue?: { isReference?: boolean; value?: unknown } }
+      | {
+          type?: string;
+          defaultValue?: { isReference?: boolean; value?: unknown };
+        }
       | undefined;
 
     if (!datasource?.defaultValue) return undefined;
@@ -72,10 +77,13 @@ export const selectFieldEntity = createEntity({
     }
 
     if (typeof value === "string" && value) return value;
-    if (Array.isArray(value) && value.length > 0 && typeof value[0] === "string") {
+    if (
+      Array.isArray(value) &&
+      value.length > 0 &&
+      typeof value[0] === "string"
+    ) {
       return value[0] as string;
     }
     return undefined;
   },
 });
-

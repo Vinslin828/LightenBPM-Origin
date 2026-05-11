@@ -12,11 +12,18 @@ import { Validator, ValidatorType } from "@/types/validator";
 import { useAtom, useStore } from "jotai";
 import { useCodeHelper } from "./useCode/useCodeHelper";
 import { useValidateFields } from "./useValidator";
+import {
+  getEntityTranslationKey,
+  resolveEntityLabel,
+} from "@/hooks/useEntityLabel";
+import { useTranslation } from "react-i18next";
 
 export default function useValidatorStore() {
   const [registryStore, setRegistryStore] = useAtom(registryStoreAtom);
-  const [{ validation: formValidators }] = useAtom(formSettingAtom);
+  const [{ validation: formValidators, defaultLang, labelTranslations }] =
+    useAtom(formSettingAtom);
   const [bStore] = useAtom(builderStoreAtom);
+  const { i18n } = useTranslation();
   const store = useStore();
   const iStore = store.get(interpreterStoreAtom);
   const domainService = container.get<IDomainService>(TYPES.DomainService);
@@ -149,6 +156,65 @@ export default function useValidatorStore() {
       : entityId;
   }
 
+  function getEntityAttributes(entityId: string) {
+    const latestSchema =
+      (store.get(interpreterStoreAtom)?.schema as FormSchema | undefined) ??
+      bStore?.getSchema();
+
+    return latestSchema?.entities?.[entityId]?.attributes as
+      | Record<string, unknown>
+      | undefined;
+  }
+
+  function getTranslatedFieldLabelByEntityId(entityId: string): {
+    translatedLabel: string;
+    rawCandidates: string[];
+  } {
+    const attributes = getEntityAttributes(entityId);
+    const name =
+      typeof attributes?.name === "string" && attributes.name.trim()
+        ? attributes.name.trim()
+        : entityId;
+    const labelAttr = attributes?.label as { value?: string } | undefined;
+    const rawLabel =
+      typeof labelAttr?.value === "string" && labelAttr.value.trim()
+        ? labelAttr.value.trim()
+        : "";
+    const fallback = rawLabel || name;
+    const translationKey = getEntityTranslationKey(entityId, { name });
+
+    return {
+      translatedLabel: resolveEntityLabel(
+        entityId,
+        fallback,
+        labelTranslations,
+        defaultLang,
+        i18n.language,
+        [translationKey],
+      ),
+      rawCandidates: Array.from(
+        new Set([rawLabel, name, entityId].filter(Boolean)),
+      ),
+    };
+  }
+
+  function translateEntityErrorMessage(
+    entityId: string,
+    message?: string,
+  ): string | undefined {
+    if (!message) return message;
+
+    const { translatedLabel, rawCandidates } =
+      getTranslatedFieldLabelByEntityId(entityId);
+
+    return rawCandidates.reduce((nextMessage, rawCandidate) => {
+      if (!rawCandidate || rawCandidate === translatedLabel) {
+        return nextMessage;
+      }
+      return nextMessage.split(rawCandidate).join(translatedLabel);
+    }, message);
+  }
+
   async function executeRegistryValidator({
     entityId,
     value,
@@ -177,7 +243,10 @@ export default function useValidatorStore() {
         typeof validationResult === "object" &&
         validationResult.isValid === false
       ) {
-        return validationResult.error ?? validator?.errorMessage;
+        return translateEntityErrorMessage(
+          entityId,
+          validationResult.error ?? validator?.errorMessage,
+        );
       }
     } else {
       const validationResult = await executeValidator({
@@ -191,12 +260,15 @@ export default function useValidatorStore() {
 
       console.debug({ validationResult });
       if (validationResult === false) {
-        return validator.errorMessage;
+        return translateEntityErrorMessage(entityId, validator.errorMessage);
       } else if (
         typeof validationResult === "object" &&
         !validationResult.isValid
       ) {
-        return validationResult.error ?? validator.errorMessage;
+        return translateEntityErrorMessage(
+          entityId,
+          validationResult.error ?? validator.errorMessage,
+        );
       }
     }
     return undefined;
@@ -277,9 +349,12 @@ export default function useValidatorStore() {
       typeof validationResult === "object" &&
       validationResult.isValid === false
     ) {
-      return validationResult.error ?? defaultErrorMessage;
+      return translateEntityErrorMessage(
+        entityId,
+        validationResult.error ?? defaultErrorMessage,
+      );
     } else if (validationResult === false) {
-      return defaultErrorMessage;
+      return translateEntityErrorMessage(entityId, defaultErrorMessage);
     }
     return undefined;
   }
